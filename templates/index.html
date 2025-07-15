@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG+LLM知识库系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .control-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .control-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.4);
+        }
+
+        .chat-container {
+            background-color: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+
+        .message.user {
+            background-color: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            background-color: white;
+            border: 1px solid #e1e5e9;
+            margin-right: auto;
+        }
+
+        .message-header {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+
+        .message-content {
+            line-height: 1.6;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .sources {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e1e5e9;
+        }
+
+        .source-item {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .source-content {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .source-metrics {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .streaming-text {
+            position: relative;
+            line-height: 1.8;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .cursor {
+            animation: blink 1s infinite;
+            font-weight: bold;
+            color: #667eea;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .streaming-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .streaming-indicator::before {
+            content: "🤖";
+            animation: pulse 2s infinite;
+        }
+
+        .typing-dots {
+            display: inline-flex;
+            gap: 2px;
+        }
+
+        .typing-dots span {
+            width: 4px;
+            height: 4px;
+            background-color: #667eea;
+            border-radius: 50%;
+            animation: typingDots 1.4s infinite;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typingDots {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        .error-message {
+            color: #e74c3c;
+            padding: 15px;
+            background: linear-gradient(135deg, #ffeaea 0%, #ffe0e0 100%);
+            border-radius: 8px;
+            border-left: 4px solid #e74c3c;
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .progress-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            margin: 5px 0;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: #e9ecef;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 2px;
+            animation: progressLoad 2s ease-in-out infinite;
+        }
+
+        @keyframes progressLoad {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading::after {
+            content: "...";
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { color: rgba(0,0,0,0); text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+            40% { color: #666; text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+            60% { text-shadow: .25em 0 0 #666, .5em 0 0 rgba(0,0,0,0); }
+            80%, 100% { text-shadow: .25em 0 0 #666, .5em 0 0 #666; }
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 6px;
+            background-color: #e1e5e9;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f44336 0%, #ff9800 50%, #4caf50 100%);
+            transition: width 0.5s ease;
+        }
+
+        .response-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧠 RAG+LLM知识库系统</h1>
+        <p>智能向量检索 + 大语言模型 = 专业知识问答助手</p>
+    </div>
+
+    <div class="stats-panel" id="stats-panel">
+        <!-- 统计信息将在这里显示 -->
+    </div>
+
+<!-- OCR 图片识别功能 -->
+<div class="container" style="margin-top: 20px;">
+    <div class="header" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); margin-bottom: 20px;">
+        <h2>📸 图片文字识别 (OCR)</h2>
+        <p>免费的图片文字识别服务，支持中英文，支持批量处理</p>
+    </div>
+
+    <div class="control-panel">
+        <div class="control-group">
+            <label for="ocr-files">📁 选择图片文件</label>
+            <input type="file" id="ocr-files" accept="image/*" multiple
+                   style="padding: 8px; border: 2px dashed #11998e; background: #f0fff4;">
+        </div>
+        <div class="control-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-success" onclick="processImages()">🔍 识别文字</button>
+        </div>
+    </div>
+
+    <div id="ocr-results" style="display: none; margin-top: 20px;">
+        <h3>识别结果</h3>
+        <div id="ocr-summary" style="padding: 15px; background: #f0fff4; border-radius: 8px; margin-bottom: 20px;"></div>
+        <div id="ocr-details"></div>
+    </div>
+</div>
+
+    <div class="container">
+        <div class="control-panel">
+            <div class="control-group">
+                <label for="data-dir">📁 数据目录路径</label>
+                <input type="text" id="data-dir" placeholder="输入包含txt文件的目录路径">
+            </div>
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button class="btn btn-success" onclick="buildKnowledgeBase()">🔨 构建知识库</button>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chat-container">
+            <div class="message assistant">
+                <div class="message-header">🤖 AI助手</div>
+                <div class="message-content">
+                    你好！我是一个专业的知识库助手，基于提供的知识库内容回答用户问题。
+                    <br><br>
+                    <strong>📚 工作规则 (System Prompt)：</strong>
+                    <ul>
+                        <li>1. 优先使用知识库内容回答问题</li>
+                        <li>2. 如果知识库内容不足，请明确说明</li>
+                        <li>3. 回答要准确、详细、有条理</li>
+                        <li>4. 适当引用来源文档</li>
+                        <li>5. 保持友好、专业的语气</li>
+                    </ul>
+                    <div style="margin-top: 15px; padding: 10px; background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); border-radius: 8px; border-left: 4px solid #667eea;">
+                        🚀 <strong>使用方法：</strong>请先构建知识库，然后就可以开始提问了！
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="search-input" class="search-input" placeholder="请输入您的问题..." onkeypress="if(event.keyCode==13) sendMessage()">
+            <button class="btn btn-primary" onclick="sendMessage()" style="min-width: 100px;">🚀 发送</button>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let messageCount = 0;
+
+        // 页面加载时获取统计信息
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+        });
+
+        function loadStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    updateStatsPanel(data);
+                })
+                .catch(error => {
+                    console.error('Failed to load stats:', error);
+                });
+        }
+
+        function updateStatsPanel(stats) {
+            const panel = document.getElementById('stats-panel');
+            panel.innerHTML =
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + stats.knowledge_base.documents + '</div>' +
+                    '<div class="stat-label">📄 文档数量</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + stats.knowledge_base.paragraphs + '</div>' +
+                    '<div class="stat-label">📝 段落数量</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + stats.performance.total_queries + '</div>' +
+                    '<div class="stat-label">❓ 总查询数</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + stats.performance.avg_response_time.toFixed(2) + 's</div>' +
+                    '<div class="stat-label">⚡ 平均响应时间</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + (stats.performance.avg_confidence * 100).toFixed(0) + '%</div>' +
+                    '<div class="stat-label">🎯 平均置信度</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-number">' + stats.ai_service.current + '</div>' +
+                    '<div class="stat-label">🤖 AI服务 ' + (stats.ai_service.connection_status ? '🟢' : '🔴') + '</div>' +
+                '</div>';
+        }
+
+        function buildKnowledgeBase() {
+            const dataDir = document.getElementById('data-dir').value;
+            if (!dataDir) {
+                alert('请输入数据目录路径');
+                return;
+            }
+
+            addMessage('user', '构建知识库: ' + dataDir);
+            addMessage('assistant', '正在构建知识库，请稍候...', true);
+
+            fetch('/build', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({data_dir: dataDir})
+            })
+            .then(response => response.json())
+            .then(data => {
+                const lastMessage = document.querySelector('.message:last-child .message-content');
+                if (data.success) {
+                    lastMessage.innerHTML =
+                        '✅ 知识库构建成功！' +
+                        '<br><br>' +
+                        '📊 <strong>构建统计：</strong>' +
+                        '<ul>' +
+                            '<li>📄 处理文件：' + data.processed_files + '/' + data.total_files + '</li>' +
+                            '<li>❌ 失败文件：' + data.failed_files + '</li>' +
+                        '</ul>' +
+                        '现在可以开始提问了！';
+                } else {
+                    lastMessage.innerHTML = '❌ 构建失败：' + data.message;
+                }
+                loadStats(); // 更新统计信息
+            })
+            .catch(error => {
+                const lastMessage = document.querySelector('.message:last-child .message-content');
+                lastMessage.innerHTML = '❌ 构建失败：' + error;
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('search-input');
+            const query = input.value.trim();
+
+            if (!query) {
+                alert('请输入问题');
+                return;
+            }
+
+            input.value = '';
+            addMessage('user', query);
+
+            // 添加优化的状态指示器
+            const statusMessage =
+                '<div class="progress-indicator">' +
+                    '<div class="streaming-indicator">' +
+                        '正在处理您的问题' +
+                        '<div class="typing-dots">' +
+                            '<span></span>' +
+                            '<span></span>' +
+                            '<span></span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="progress-bar">' +
+                        '<div class="progress-fill"></div>' +
+                    '</div>' +
+                '</div>';
+            addMessage('assistant', statusMessage, true);
+
+            // 使用流式API
+            fetch('/query_stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: query,
+                    session_id: sessionId
+                })
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+                let sources = [];
+                let aiResponse = '';
+                let currentSessionId = '';
+                let confidence = 0;
+                let responseTime = 0;
+                let modelInfo = {};
+                const chatContainer = document.getElementById('chat-container');
+                const lastMessage = document.querySelector('.message:last-child .message-content');
+
+                function processChunk(result) {
+                    if (result.done) {
+                        displayFinalResult();
+                        loadStats();
+                        return;
+                    }
+
+                    try {
+                        // 正确解码UTF-8字符
+                        const chunk = decoder.decode(result.value, { stream: true });
+                        buffer += chunk;
+
+                        // 处理完整的行
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // 保留最后一行（可能不完整）
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6).trim();
+
+                                if (data === '[DONE]') {
+                                    displayFinalResult();
+                                    loadStats();
+                                    return;
+                                }
+
+                                if (data) {
+                                    try {
+                                        const parsedChunk = JSON.parse(data);
+                                        handleStreamChunk(parsedChunk);
+                                    } catch (e) {
+                                        console.error('解析数据块失败:', e, '原始数据:', data);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('解码错误:', e);
+                    }
+
+                    return reader.read().then(processChunk);
+                }
+
+                function handleStreamChunk(chunk) {
+                    switch (chunk.type) {
+                        case 'start':
+                            console.log('流式查询开始:', chunk.data);
+                            lastMessage.innerHTML =
+                                '<div class="progress-indicator">' +
+                                    '<div class="streaming-indicator">' +
+                                        '🚀 查询已启动，正在检索知识库' +
+                                        '<div class="typing-dots">' +
+                                            '<span></span>' +
+                                            '<span></span>' +
+                                            '<span></span>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>';
+                            break;
+
+                        case 'sources':
+                            sources = chunk.data.sources;
+                            currentSessionId = chunk.data.session_id;
+                            sessionId = currentSessionId;
+
+                            const sourceCount = sources.length;
+                            lastMessage.innerHTML =
+                                '<div class="progress-indicator">' +
+                                    '<div class="streaming-indicator">' +
+                                        '✅ 已找到 ' + sourceCount + ' 个相关文档，AI正在分析' +
+                                        '<div class="typing-dots">' +
+                                            '<span></span>' +
+                                            '<span></span>' +
+                                            '<span></span>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>';
+
+                            setTimeout(() => {
+                                lastMessage.innerHTML =
+                                    '<div class="progress-indicator">' +
+                                        '<div class="streaming-indicator">' +
+                                            '🧠 AI正在组织最佳答案' +
+                                            '<div class="typing-dots">' +
+                                                '<span></span>' +
+                                                '<span></span>' +
+                                                '<span></span>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>';
+                            }, 800);
+                            break;
+
+                        case 'text':
+                            aiResponse += chunk.data.content;
+                            currentSessionId = chunk.data.session_id;
+                            sessionId = currentSessionId;
+                            updateStreamingText();
+                            break;
+
+                        case 'complete':
+                            confidence = chunk.data.confidence;
+                            responseTime = chunk.data.response_time;
+                            modelInfo = chunk.data.model_info;
+                            currentSessionId = chunk.data.session_id;
+                            sessionId = currentSessionId;
+                            break;
+
+                        case 'statistics':
+                            const stats = chunk.data;
+                            console.log('📊 流式查询统计: 总块数=' + stats.total_chunks + ', 总时间=' + stats.total_time.toFixed(2) + 's');
+                            break;
+
+                        case 'error':
+                            const errorType = chunk.data.error_type || 'general';
+                            let errorMessage = chunk.data.message;
+
+                            switch (errorType) {
+                                case 'timeout':
+                                    errorMessage = '⏰ 请求超时，请检查网络连接后重试';
+                                    break;
+                                case 'connection':
+                                    errorMessage = '🔌 连接失败，请检查网络或稍后重试';
+                                    break;
+                                case 'stream_processing':
+                                    errorMessage = '🔄 流式处理异常：' + errorMessage;
+                                    break;
+                                default:
+                                    errorMessage = '❌ 查询失败：' + errorMessage;
+                            }
+
+                            lastMessage.innerHTML =
+                                '<div class="error-message">' +
+                                    errorMessage +
+                                    '<br><small style="color: #666; margin-top: 8px; display: block;">' +
+                                        '💡 提示：您可以尝试重新提问或检查系统状态' +
+                                        (chunk.data.chunks_processed ? '<br>📊 已处理 ' + chunk.data.chunks_processed + ' 个数据块' : '') +
+                                    '</small>' +
+                                '</div>';
+                            console.error('查询错误:', chunk.data);
+                            break;
+                    }
+                }
+
+                let updateTextTimeout;
+                function updateStreamingText() {
+                    clearTimeout(updateTextTimeout);
+                    updateTextTimeout = setTimeout(() => {
+                        const formattedResponse = aiResponse
+                            .replace(/\n/g, '<br>')
+                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                            .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+                        lastMessage.innerHTML =
+                            '<div class="streaming-text">' +
+                                formattedResponse +
+                                '<span class="cursor">|</span>' +
+                            '</div>';
+
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }, 50);
+                }
+
+                function displayFinalResult() {
+                    const formattedResponse = aiResponse
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/\`(.*?)\`/g, '<code style="background: #f8f9fa; padding: 2px 4px; border-radius: 3px;">$1</code>');
+
+                    let sourcesHtml = '';
+                    if (sources && sources.length > 0) {
+                        sourcesHtml = '<div class="sources" style="animation: fadeIn 0.5s ease-in;"><strong>📚 参考来源：</strong>';
+                        sources.forEach((source, index) => {
+                            const truncatedContent = source.content.length > 150
+                                ? source.content.substring(0, 150) + '...'
+                                : source.content;
+
+                            sourcesHtml +=
+                                '<div class="source-item" style="animation: fadeIn 0.5s ease-in ' + (index * 0.1) + 's both;">' +
+                                    '<div class="source-title">' +
+                                        '📄 ' + (index + 1) + '. ' + source.title +
+                                        '<span style="float: right; font-size: 12px; color: #888;">' +
+                                            '匹配度: ' + (source.score * 100).toFixed(0) + '%' +
+                                        '</span>' +
+                                    '</div>' +
+                                    '<div class="source-content">' + truncatedContent + '</div>' +
+                                    '<div class="source-metrics">' +
+                                        '<span style="color: #28a745;">✓ 相似度: ' + (source.score * 100).toFixed(1) + '%</span>' +
+                                        '<span style="color: #007bff;">★ 质量评分: ' + (source.quality * 100).toFixed(1) + '%</span>' +
+                                    '</div>' +
+                                '</div>';
+                        });
+                        sourcesHtml += '</div>';
+                    }
+
+                    const confidencePercent = (confidence * 100).toFixed(1);
+                    const confidenceColor = confidence > 0.8 ? '#28a745' : confidence > 0.6 ? '#ffc107' : '#dc3545';
+
+                    const responseInfo =
+                        '<div class="response-info" style="animation: fadeIn 0.5s ease-in 0.3s both;">' +
+                            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">' +
+                                '<span>⚡ 响应时间: <strong>' + responseTime.toFixed(2) + 's</strong></span>' +
+                                '<span>🎯 置信度: <strong style="color: ' + confidenceColor + ';">' + confidencePercent + '%</strong></span>' +
+                                '<span>🤖 模型: <strong>' + modelInfo.service + '</strong></span>' +
+                            '</div>' +
+                            '<div class="confidence-bar">' +
+                                '<div class="confidence-fill" style="width: ' + confidencePercent + '%; background: ' + confidenceColor + '; transition: width 1s ease-in-out;"></div>' +
+                            '</div>' +
+                        '</div>';
+
+                    lastMessage.innerHTML =
+                        '<div style="animation: fadeIn 0.5s ease-in;">' +
+                            formattedResponse +
+                        '</div>' +
+                        sourcesHtml +
+                        responseInfo;
+
+                    setTimeout(() => {
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }, 100);
+                }
+
+                return reader.read().then(processChunk);
+            })
+            .catch(error => {
+                const lastMessage = document.querySelector('.message:last-child .message-content');
+                lastMessage.innerHTML = '❌ 查询失败：' + error;
+                console.error('流式查询失败:', error);
+            });
+        }
+
+        function addMessage(sender, content, isLoading = false) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + sender;
+
+            const icon = sender === 'user' ? '👤' : '🤖';
+            const senderName = sender === 'user' ? '用户' : 'AI助手';
+
+            messageDiv.innerHTML =
+                '<div class="message-header">' + icon + ' ' + senderName + ' ' + new Date().toLocaleTimeString() + '</div>' +
+                '<div class="message-content">' + (isLoading ? '<div class="loading">正在处理</div>' : content) + '</div>';
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            messageCount++;
+        }
+
+        // 自动聚焦输入框
+        document.getElementById('search-input').focus();
+
+        // OCR 图片识别功能
+        function processImages() {
+            const fileInput = document.getElementById('ocr-files');
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                alert('请选择图片文件！');
+                return;
+            }
+
+            // 显示处理中状态
+            const resultsDiv = document.getElementById('ocr-results');
+            const summaryDiv = document.getElementById('ocr-summary');
+            const detailsDiv = document.getElementById('ocr-details');
+
+            resultsDiv.style.display = 'block';
+            summaryDiv.innerHTML = '📸 正在处理图片，请稍候...';
+            detailsDiv.innerHTML = '';
+
+            // 准备FormData
+            const formData = new FormData();
+
+            if (files.length === 1) {
+                // 单张图片处理
+                formData.append('file', files[0]);
+
+                fetch('/ocr_single', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displaySingleResult(data);
+                })
+                .catch(error => {
+                    summaryDiv.innerHTML = '❌ 处理失败：' + error;
+                });
+            } else {
+                // 批量处理
+                for (let i = 0; i < files.length; i++) {
+                    formData.append('files', files[i]);
+                }
+
+                fetch('/ocr_batch', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displayBatchResults(data);
+                })
+                .catch(error => {
+                    summaryDiv.innerHTML = '❌ 处理失败：' + error;
+                });
+            }
+        }
+
+        function displaySingleResult(data) {
+            const summaryDiv = document.getElementById('ocr-summary');
+            const detailsDiv = document.getElementById('ocr-details');
+
+            if (data.success) {
+                summaryDiv.innerHTML = `
+                    ✅ 识别完成！
+                    <br>📄 文件：${data.filename}
+                    <br>📝 文字长度：${data.text_length} 字符
+                    <br>📊 状态：${data.has_text ? '成功识别' : '未识别到文字'}
+                `;
+
+                detailsDiv.innerHTML = `
+                    <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px;">
+                        <h4>📄 ${data.filename}</h4>
+                        <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
+                            <strong>识别结果：</strong><br>
+                            ${data.text ? data.text.replace(/\n/g, '<br>') : '未识别到文字'}
+                        </div>
+                    </div>
+                `;
+            } else {
+                summaryDiv.innerHTML = '❌ 识别失败：' + data.error;
+                detailsDiv.innerHTML = '';
+            }
+        }
+
+        function displayBatchResults(data) {
+            const summaryDiv = document.getElementById('ocr-summary');
+            const detailsDiv = document.getElementById('ocr-details');
+
+            if (data.success) {
+                const summary = data.data.summary;
+                summaryDiv.innerHTML = `
+                    ✅ 批量识别完成！
+                    <br>📊 总文件数：${summary.total_files}
+                    <br>✅ 成功：${summary.success_count}
+                    <br>❌ 失败：${summary.failed_count}
+                    <br>📝 有文字：${summary.files_with_text}
+                    <br>📈 成功率：${summary.success_rate}%
+                    <br>📄 总字符数：${summary.total_text_length}
+                `;
+
+                let detailsHTML = '';
+                data.data.results.forEach((result, index) => {
+                    const statusIcon = result.success ? '✅' : '❌';
+                    const statusText = result.success ? '成功' : '失败';
+
+                    detailsHTML += `
+                        <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
+                            <h4>${statusIcon} ${result.filename} (${statusText})</h4>
+                            ${result.success ? `
+                                <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
+                                    <strong>识别结果：</strong><br>
+                                    ${result.text ? result.text.replace(/\n/g, '<br>') : '未识别到文字'}
+                                </div>
+                            ` : `
+                                <div style="background: #fff5f5; padding: 10px; border-radius: 5px; border-left: 4px solid #e74c3c;">
+                                    <strong>错误：</strong>${result.error}
+                                </div>
+                            `}
+                        </div>
+                    `;
+                });
+
+                detailsDiv.innerHTML = detailsHTML;
+            } else {
+                summaryDiv.innerHTML = '❌ 批量识别失败：' + data.error;
+                detailsDiv.innerHTML = '';
+            }
+        }
+    </script>
+</body>
+</html>
