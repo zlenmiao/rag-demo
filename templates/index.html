@@ -33,6 +33,27 @@
             opacity: 0.9;
         }
 
+        .nav-links {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background-color: rgba(255,255,255,0.2);
+            margin: 0 10px;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .nav-links a:hover {
+            background-color: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
         .container {
             background-color: white;
             padding: 30px;
@@ -380,6 +401,10 @@
     <div class="header">
         <h1>🧠 RAG+LLM知识库系统</h1>
         <p>智能向量检索 + 大语言模型 = 专业知识问答助手</p>
+        <div class="nav-links">
+            <a href="/knowledge_base">📚 知识库管理</a>
+            <a href="/stats">📊 系统状态</a>
+        </div>
     </div>
 
     <div class="stats-panel" id="stats-panel">
@@ -403,6 +428,10 @@
             <label>&nbsp;</label>
             <button class="btn btn-success" onclick="processImages()">🔍 识别文字</button>
         </div>
+        <div class="control-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="addImagesToKB()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📚 识别并加入知识库</button>
+        </div>
     </div>
 
     <div id="ocr-results" style="display: none; margin-top: 20px;">
@@ -416,7 +445,13 @@
         <div class="control-panel">
             <div class="control-group">
                 <label for="data-dir">📁 数据目录路径</label>
-                <input type="text" id="data-dir" placeholder="输入包含txt文件的目录路径">
+                <input type="text" id="data-dir" placeholder="输入包含txt文件和图片文件的目录路径">
+            </div>
+            <div class="control-group">
+                <label for="include-images">
+                    <input type="checkbox" id="include-images" checked style="margin-right: 5px;">
+                    📸 包含图片文件 (OCR)
+                </label>
             </div>
             <div class="control-group">
                 <label>&nbsp;</label>
@@ -438,8 +473,19 @@
                         <li>4. 适当引用来源文档</li>
                         <li>5. 保持友好、专业的语气</li>
                     </ul>
+                    <br>
+                    <strong>🆕 新功能：图片文字识别 (OCR)</strong>
+                    <ul>
+                        <li>📸 支持中英文图片文字识别</li>
+                        <li>📚 可将图片内容直接添加到知识库</li>
+                        <li>🔍 支持在对话中检索图片文字内容</li>
+                        <li>📄 支持批量处理多张图片</li>
+                    </ul>
                     <div style="margin-top: 15px; padding: 10px; background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); border-radius: 8px; border-left: 4px solid #667eea;">
-                        🚀 <strong>使用方法：</strong>请先构建知识库，然后就可以开始提问了！
+                        🚀 <strong>使用方法：</strong>
+                        <br>1. 构建知识库：包含文本文件和图片文件
+                        <br>2. 或者直接上传图片：使用OCR功能识别文字并加入知识库
+                        <br>3. 开始提问：系统会从所有内容中检索相关信息
                     </div>
                 </div>
             </div>
@@ -502,12 +548,14 @@
 
         function buildKnowledgeBase() {
             const dataDir = document.getElementById('data-dir').value;
+            const includeImages = document.getElementById('include-images').checked;
+
             if (!dataDir) {
                 alert('请输入数据目录路径');
                 return;
             }
 
-            addMessage('user', '构建知识库: ' + dataDir);
+            addMessage('user', '构建知识库: ' + dataDir + (includeImages ? ' (包含图片)' : ''));
             addMessage('assistant', '正在构建知识库，请稍候...', true);
 
             fetch('/build', {
@@ -515,21 +563,50 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({data_dir: dataDir})
+                body: JSON.stringify({
+                    data_dir: dataDir,
+                    include_images: includeImages
+                })
             })
             .then(response => response.json())
             .then(data => {
                 const lastMessage = document.querySelector('.message:last-child .message-content');
                 if (data.success) {
-                    lastMessage.innerHTML =
-                        '✅ 知识库构建成功！' +
-                        '<br><br>' +
-                        '📊 <strong>构建统计：</strong>' +
-                        '<ul>' +
-                            '<li>📄 处理文件：' + data.processed_files + '/' + data.total_files + '</li>' +
-                            '<li>❌ 失败文件：' + data.failed_files + '</li>' +
-                        '</ul>' +
-                        '现在可以开始提问了！';
+                    // 处理新的数据结构
+                    let summaryHtml = '';
+
+                    if (data.text_files || data.image_files) {
+                        // 新格式：包含图片处理
+                        const textFiles = data.text_files || {};
+                        const imageFiles = data.image_files || {};
+                        const summary = data.summary || {};
+
+                        summaryHtml =
+                            '✅ 知识库构建成功！' +
+                            '<br><br>' +
+                            '📊 <strong>构建统计：</strong>' +
+                            '<ul>' +
+                                '<li>📄 文本文件：' + (textFiles.processed || 0) + '/' + (textFiles.total || 0) + '</li>' +
+                                (imageFiles.total > 0 ?
+                                    '<li>📸 图片文件：' + (imageFiles.processed || 0) + '/' + (imageFiles.total || 0) + '</li>' : '') +
+                                '<li>📚 总计文档：' + (summary.total_processed || 0) + '</li>' +
+                                '<li>❌ 失败文件：' + (summary.total_failed || 0) + '</li>' +
+                                (summary.ocr_available !== undefined ?
+                                    '<li>🔍 OCR状态：' + (summary.ocr_available ? '✅ 可用' : '❌ 不可用') + '</li>' : '') +
+                            '</ul>';
+                    } else {
+                        // 兼容旧格式
+                        summaryHtml =
+                            '✅ 知识库构建成功！' +
+                            '<br><br>' +
+                            '📊 <strong>构建统计：</strong>' +
+                            '<ul>' +
+                                '<li>📄 处理文件：' + (data.processed_files || 0) + '/' + (data.total_files || 0) + '</li>' +
+                                '<li>❌ 失败文件：' + (data.failed_files || 0) + '</li>' +
+                            '</ul>';
+                    }
+
+                    lastMessage.innerHTML = summaryHtml + '现在可以开始提问了！';
                 } else {
                     lastMessage.innerHTML = '❌ 构建失败：' + data.message;
                 }
@@ -867,112 +944,144 @@
 
             // 准备FormData
             const formData = new FormData();
-
-            if (files.length === 1) {
-                // 单张图片处理
-                formData.append('file', files[0]);
-
-                fetch('/ocr_single', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    displaySingleResult(data);
-                })
-                .catch(error => {
-                    summaryDiv.innerHTML = '❌ 处理失败：' + error;
-                });
-            } else {
-                // 批量处理
-                for (let i = 0; i < files.length; i++) {
-                    formData.append('files', files[i]);
-                }
-
-                fetch('/ocr_batch', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    displayBatchResults(data);
-                })
-                .catch(error => {
-                    summaryDiv.innerHTML = '❌ 处理失败：' + error;
-                });
+            for (let i = 0; i < files.length; i++) {
+                formData.append('images', files[i]);
             }
+
+            fetch('/upload_images', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayOCRResults(data);
+                } else {
+                    summaryDiv.innerHTML = '❌ 处理失败：' + data.message;
+                    detailsDiv.innerHTML = '';
+                }
+            })
+            .catch(error => {
+                summaryDiv.innerHTML = '❌ 处理失败：' + error;
+                detailsDiv.innerHTML = '';
+            });
         }
 
-        function displaySingleResult(data) {
+        function displayOCRResults(data) {
             const summaryDiv = document.getElementById('ocr-summary');
             const detailsDiv = document.getElementById('ocr-details');
 
-            if (data.success) {
-                summaryDiv.innerHTML = `
-                    ✅ 识别完成！
-                    <br>📄 文件：${data.filename}
-                    <br>📝 文字长度：${data.text_length} 字符
-                    <br>📊 状态：${data.has_text ? '成功识别' : '未识别到文字'}
-                `;
+            const successCount = data.results.filter(r => r.success).length;
+            const failedCount = data.results.length - successCount;
+            const totalTextLength = data.results.reduce((sum, r) => sum + (r.text_length || 0), 0);
+            const filesWithText = data.results.filter(r => r.has_text).length;
 
-                detailsDiv.innerHTML = `
-                    <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-top: 10px;">
-                        <h4>📄 ${data.filename}</h4>
-                        <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
-                            <strong>识别结果：</strong><br>
-                            ${data.text ? data.text.replace(/\n/g, '<br>') : '未识别到文字'}
-                        </div>
+            summaryDiv.innerHTML = `
+                ✅ 识别完成！
+                <br>📊 总文件数：${data.results.length}
+                <br>✅ 成功：${successCount}
+                <br>❌ 失败：${failedCount}
+                <br>📝 有文字：${filesWithText}
+                <br>📄 总字符数：${totalTextLength}
+            `;
+
+            let detailsHTML = '';
+            data.results.forEach((result, index) => {
+                const statusIcon = result.success ? '✅' : '❌';
+                const statusText = result.success ? '成功' : '失败';
+
+                detailsHTML += `
+                    <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
+                        <h4>${statusIcon} ${result.filename} (${statusText})</h4>
+                        ${result.success ? `
+                            <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
+                                <strong>识别结果：</strong><br>
+                                ${result.text ? result.text.replace(/\n/g, '<br>') : '未识别到文字'}
+                            </div>
+                        ` : `
+                            <div style="background: #fff5f5; padding: 10px; border-radius: 5px; border-left: 4px solid #e74c3c;">
+                                <strong>错误：</strong>${result.error}
+                            </div>
+                        `}
                     </div>
                 `;
-            } else {
-                summaryDiv.innerHTML = '❌ 识别失败：' + data.error;
-                detailsDiv.innerHTML = '';
-            }
+            });
+
+            detailsDiv.innerHTML = detailsHTML;
         }
 
-        function displayBatchResults(data) {
+        function addImagesToKB() {
+            const fileInput = document.getElementById('ocr-files');
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                alert('请选择要添加到知识库的图片文件！');
+                return;
+            }
+
+            const resultsDiv = document.getElementById('ocr-results');
             const summaryDiv = document.getElementById('ocr-summary');
             const detailsDiv = document.getElementById('ocr-details');
 
-            if (data.success) {
-                const summary = data.data.summary;
-                summaryDiv.innerHTML = `
-                    ✅ 批量识别完成！
-                    <br>📊 总文件数：${summary.total_files}
-                    <br>✅ 成功：${summary.success_count}
-                    <br>❌ 失败：${summary.failed_count}
-                    <br>📝 有文字：${summary.files_with_text}
-                    <br>📈 成功率：${summary.success_rate}%
-                    <br>📄 总字符数：${summary.total_text_length}
-                `;
+            resultsDiv.style.display = 'block';
+            summaryDiv.innerHTML = '📸 正在添加图片到知识库，请稍候...';
+            detailsDiv.innerHTML = '';
 
-                let detailsHTML = '';
-                data.data.results.forEach((result, index) => {
-                    const statusIcon = result.success ? '✅' : '❌';
-                    const statusText = result.success ? '成功' : '失败';
-
-                    detailsHTML += `
-                        <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
-                            <h4>${statusIcon} ${result.filename} (${statusText})</h4>
-                            ${result.success ? `
-                                <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
-                                    <strong>识别结果：</strong><br>
-                                    ${result.text ? result.text.replace(/\n/g, '<br>') : '未识别到文字'}
-                                </div>
-                            ` : `
-                                <div style="background: #fff5f5; padding: 10px; border-radius: 5px; border-left: 4px solid #e74c3c;">
-                                    <strong>错误：</strong>${result.error}
-                                </div>
-                            `}
-                        </div>
-                    `;
-                });
-
-                detailsDiv.innerHTML = detailsHTML;
-            } else {
-                summaryDiv.innerHTML = '❌ 批量识别失败：' + data.error;
-                detailsDiv.innerHTML = '';
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('images', files[i]);
             }
+
+            fetch('/add_images_to_kb', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const summary = data.summary;
+                    summaryDiv.innerHTML = `
+                        ✅ 图片添加到知识库成功！
+                        <br>📊 总文件数：${summary.total_files}
+                        <br>✅ 成功添加：${summary.processed_count} 个文档
+                        <br>❌ 失败：${summary.failed_count}
+                        <br>📚 知识库已更新，可以开始提问了！
+                    `;
+
+                    // 显示详细结果
+                    let detailsHTML = '';
+                    data.results.forEach((result, index) => {
+                        const statusIcon = result.success ? '✅' : '❌';
+                        const statusText = result.success ? '成功添加' : '添加失败';
+
+                        detailsHTML += `
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px;">
+                                <h4>${statusIcon} ${result.filename} (${statusText})</h4>
+                                ${result.success ? `
+                                    <div style="background: #f0fff4; padding: 10px; border-radius: 5px; border-left: 4px solid #11998e;">
+                                        <strong>✅ 已添加到知识库</strong><br>
+                                        📝 文字长度：${result.text_length} 字符<br>
+                                        📄 段落数：${result.paragraph_count} 段
+                                    </div>
+                                ` : `
+                                    <div style="background: #fff5f5; padding: 10px; border-radius: 5px; border-left: 4px solid #e74c3c;">
+                                        <strong>错误：</strong>${result.error}
+                                    </div>
+                                `}
+                            </div>
+                        `;
+                    });
+
+                    detailsDiv.innerHTML = detailsHTML;
+                } else {
+                    summaryDiv.innerHTML = '❌ 添加失败：' + data.message;
+                    detailsDiv.innerHTML = '';
+                }
+            })
+            .catch(error => {
+                summaryDiv.innerHTML = '❌ 添加失败：' + error;
+                detailsDiv.innerHTML = '';
+            });
         }
     </script>
 </body>

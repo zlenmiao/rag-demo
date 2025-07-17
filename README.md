@@ -11,6 +11,15 @@ pip install -r requirements.txt
 # 创建 key.txt 文件，填入你的AI API密钥
 ```
 
+```bash
+Windows下安装 Tesseract
+下载：https://github.com/UB-Mannheim/tesseract/wiki
+安装到以下任一路径，或其他路径时，需修改 image_processor.py possible_paths 变量：
+   C:\Program Files\Tesseract-OCR\tesseract.exe
+   C:\Program Files (x86)\Tesseract-OCR\tesseract.exe
+   C:\Users\{用户名}\AppData\Local\Programs\Tesseract-OCR\tesseract.exe
+```
+
 ### 2. 启动系统
 ```bash
 # 启动Web服务

@@ -16,6 +16,7 @@ from llm_client import LLMClient
 from conversation_manager import ConversationManager
 from data_models import ConversationTurn, SearchResult
 from config import Config
+from image_processor import ImageProcessor
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class AdvancedRAGSystem:
         self.vector_store = IntelligentVectorStore()
         self.llm_client = LLMClient()
         self.conversation_manager = ConversationManager()
+        self.image_processor = ImageProcessor()
 
         # 加载存储
         self.vector_store.load_from_file()
@@ -39,7 +41,7 @@ class AdvancedRAGSystem:
             "avg_confidence": 0
         }
 
-    def build_knowledge_base(self, data_dir: str) -> Dict:
+    def build_knowledge_base(self, data_dir: str, include_images: bool = True) -> Dict:
         """构建知识库"""
         if not os.path.exists(data_dir):
             return {"success": False, "message": f"数据目录不存在: {data_dir}"}
@@ -47,11 +49,22 @@ class AdvancedRAGSystem:
         # 重置向量存储
         self.vector_store = IntelligentVectorStore()
 
+        # 支持的文件类型
         txt_files = [f for f in os.listdir(data_dir) if f.endswith('.txt')]
+        image_files = []
+
+        if include_images and self.image_processor.ocr_available:
+            # 支持的图片格式
+            image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+            image_files = [f for f in os.listdir(data_dir)
+                          if any(f.lower().endswith(ext) for ext in image_extensions)]
 
         processed_count = 0
         failed_count = 0
+        image_processed_count = 0
+        image_failed_count = 0
 
+        # 处理文本文件
         for filename in txt_files:
             file_path = os.path.join(data_dir, filename)
             document = self.processor.process_document(file_path)
@@ -61,18 +74,66 @@ class AdvancedRAGSystem:
             else:
                 failed_count += 1
 
+        # 处理图片文件
+        if image_files and self.image_processor.ocr_available:
+            logger.info(f"开始处理 {len(image_files)} 个图片文件...")
+
+            for filename in image_files:
+                try:
+                    file_path = os.path.join(data_dir, filename)
+
+                    # 读取图片文件
+                    with open(file_path, 'rb') as f:
+                        image_data = f.read()
+
+                    # OCR处理
+                    ocr_result = self.image_processor.extract_text_from_image(image_data, filename)
+
+                    # 转换为文档对象
+                    document = self.image_processor.create_document_from_ocr(ocr_result, file_path)
+
+                    if document:
+                        self.vector_store.add_document(document)
+                        image_processed_count += 1
+                        logger.info(f"成功处理图片: {filename}")
+                    else:
+                        image_failed_count += 1
+                        logger.warning(f"图片未提取到有效文字: {filename}")
+
+                except Exception as e:
+                    image_failed_count += 1
+                    logger.error(f"处理图片失败 {filename}: {e}")
+
         # 保存向量存储
         self.vector_store.save_to_file()
+
+        # 统计结果
+        total_processed = processed_count + image_processed_count
+        total_failed = failed_count + image_failed_count
+        total_files = len(txt_files) + len(image_files)
 
         result = {
             "success": True,
             "message": f"知识库构建完成",
-            "processed_files": processed_count,
-            "failed_files": failed_count,
-            "total_files": len(txt_files)
+            "text_files": {
+                "processed": processed_count,
+                "failed": failed_count,
+                "total": len(txt_files)
+            },
+            "image_files": {
+                "processed": image_processed_count,
+                "failed": image_failed_count,
+                "total": len(image_files)
+            },
+            "summary": {
+                "total_processed": total_processed,
+                "total_failed": total_failed,
+                "total_files": total_files,
+                "ocr_available": self.image_processor.ocr_available
+            }
         }
 
-        logger.info(f"知识库构建完成，处理了 {processed_count}/{len(txt_files)} 个文件")
+        logger.info(f"知识库构建完成 - 文本文件: {processed_count}/{len(txt_files)}, 图片文件: {image_processed_count}/{len(image_files)}")
         return result
 
     def _build_context(self, search_results: List[SearchResult], max_length: int = Config.MAX_CONTEXT_LENGTH) -> str:

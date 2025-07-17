@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库数据管理 - RAG+LLM系统</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background-color: rgba(255,255,255,0.2);
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            background-color: rgba(255,255,255,0.3);
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #6c757d;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .document-item {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .document-item:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.1);
+        }
+
+        .document-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .document-meta {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+
+        .document-preview {
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .paragraph-item {
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .paragraph-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        .quality-score {
+            background-color: #28a745;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+
+        .quality-score.medium {
+            background-color: #ffc107;
+        }
+
+        .quality-score.low {
+            background-color: #dc3545;
+        }
+
+        .paragraph-content {
+            line-height: 1.6;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-controls select {
+            padding: 8px 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .highlight {
+            background-color: yellow;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 知识库数据管理</h1>
+        <p>管理和查看RAG系统中的知识库内容</p>
+        <div class="nav-links">
+            <a href="/">🏠 返回主页</a>
+            <a href="#" onclick="refreshData()">🔄 刷新数据</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 统计信息 -->
+        <div id="stats-section">
+            <h2>📊 统计信息</h2>
+            <div class="stats-grid" id="stats-grid">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 选项卡 -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('documents')">📄 文档列表</button>
+            <button class="tab" onclick="showTab('paragraphs')">📝 段落信息</button>
+        </div>
+
+        <!-- 文档列表 -->
+        <div id="documents-tab" class="tab-content active">
+            <input type="text" class="search-box" id="document-search" placeholder="🔍 搜索文档标题或内容..." oninput="searchDocuments()">
+            <div class="filter-controls">
+                <select id="sort-documents" onchange="sortDocuments()">
+                    <option value="title">按标题排序</option>
+                    <option value="created_at">按创建时间排序</option>
+                    <option value="content_length">按内容长度排序</option>
+                    <option value="paragraphs_count">按段落数量排序</option>
+                </select>
+            </div>
+            <div id="documents-list">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 段落信息 -->
+        <div id="paragraphs-tab" class="tab-content">
+            <input type="text" class="search-box" id="paragraph-search" placeholder="🔍 搜索段落内容..." oninput="searchParagraphs()">
+            <div class="filter-controls">
+                <select id="filter-quality" onchange="filterParagraphs()">
+                    <option value="all">所有质量等级</option>
+                    <option value="high">高质量 (≥0.7)</option>
+                    <option value="medium">中等质量 (0.3-0.7)</option>
+                    <option value="low">低质量 (<0.3)</option>
+                </select>
+                <select id="sort-paragraphs" onchange="sortParagraphs()">
+                    <option value="index">按索引排序</option>
+                    <option value="quality_score">按质量分数排序</option>
+                    <option value="doc_id">按文档分组</option>
+                </select>
+            </div>
+            <div id="paragraphs-list">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文档详情模态框 -->
+    <div id="document-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="document-detail">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let knowledgeBaseData = null;
+        let filteredDocuments = [];
+        let filteredParagraphs = [];
+
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadKnowledgeBaseData();
+            setupModal();
+        });
+
+        // 加载知识库数据
+        async function loadKnowledgeBaseData() {
+            try {
+                const response = await fetch('/api/knowledge_base_data');
+                const data = await response.json();
+
+                if (data.success) {
+                    knowledgeBaseData = data;
+                    filteredDocuments = data.documents;
+                    filteredParagraphs = data.paragraphs;
+
+                    renderStats(data.stats);
+                    renderDocuments(filteredDocuments);
+                    renderParagraphs(filteredParagraphs);
+                } else {
+                    showError(data.error || '加载数据失败');
+                }
+            } catch (error) {
+                showError('网络错误: ' + error.message);
+            }
+        }
+
+        // 渲染统计信息
+        function renderStats(stats) {
+            const statsGrid = document.getElementById('stats-grid');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${stats.total_documents}</div>
+                    <div class="stat-label">文档总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.total_paragraphs}</div>
+                    <div class="stat-label">段落总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.total_embeddings}</div>
+                    <div class="stat-label">向量嵌入数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${stats.avg_paragraph_length || 0}</div>
+                    <div class="stat-label">平均段落长度</div>
+                </div>
+            `;
+        }
+
+        // 渲染文档列表
+        function renderDocuments(documents) {
+            const documentsList = document.getElementById('documents-list');
+
+            if (documents.length === 0) {
+                documentsList.innerHTML = '<div class="loading">没有找到文档</div>';
+                return;
+            }
+
+            documentsList.innerHTML = documents.map(doc => `
+                <div class="document-item" onclick="viewDocument('${doc.id}')">
+                    <div class="document-title">${doc.title}</div>
+                    <div class="document-meta">
+                        <span>📄 ${doc.content_length} 字符</span>
+                        <span>📝 ${doc.paragraphs_count} 段落</span>
+                        <span>📅 ${doc.created_at}</span>
+                    </div>
+                    <div class="document-preview">${doc.preview}</div>
+                </div>
+            `).join('');
+        }
+
+        // 渲染段落列表
+        function renderParagraphs(paragraphs) {
+            const paragraphsList = document.getElementById('paragraphs-list');
+
+            if (paragraphs.length === 0) {
+                paragraphsList.innerHTML = '<div class="loading">没有找到段落</div>';
+                return;
+            }
+
+            paragraphsList.innerHTML = paragraphs.map(para => `
+                <div class="paragraph-item">
+                    <div class="paragraph-meta">
+                        <span>段落 #${para.index} (文档: ${para.doc_id})</span>
+                        <span class="quality-score ${getQualityClass(para.quality_score)}">
+                            质量: ${para.quality_score}
+                        </span>
+                    </div>
+                    <div class="paragraph-content">${para.content}</div>
+                </div>
+            `).join('');
+        }
+
+        // 获取质量等级样式类
+        function getQualityClass(score) {
+            if (score >= 0.7) return 'high';
+            if (score >= 0.3) return 'medium';
+            return 'low';
+        }
+
+        // 搜索文档
+        function searchDocuments() {
+            const searchTerm = document.getElementById('document-search').value.toLowerCase();
+            filteredDocuments = knowledgeBaseData.documents.filter(doc =>
+                doc.title.toLowerCase().includes(searchTerm) ||
+                doc.preview.toLowerCase().includes(searchTerm)
+            );
+            renderDocuments(filteredDocuments);
+        }
+
+        // 搜索段落
+        function searchParagraphs() {
+            const searchTerm = document.getElementById('paragraph-search').value.toLowerCase();
+            filteredParagraphs = knowledgeBaseData.paragraphs.filter(para =>
+                para.content.toLowerCase().includes(searchTerm)
+            );
+            filterParagraphs(); // 应用质量过滤
+        }
+
+        // 排序文档
+        function sortDocuments() {
+            const sortBy = document.getElementById('sort-documents').value;
+            filteredDocuments.sort((a, b) => {
+                if (sortBy === 'title') return a.title.localeCompare(b.title);
+                if (sortBy === 'created_at') return new Date(b.created_at) - new Date(a.created_at);
+                if (sortBy === 'content_length') return b.content_length - a.content_length;
+                if (sortBy === 'paragraphs_count') return b.paragraphs_count - a.paragraphs_count;
+                return 0;
+            });
+            renderDocuments(filteredDocuments);
+        }
+
+        // 过滤段落
+        function filterParagraphs() {
+            const qualityFilter = document.getElementById('filter-quality').value;
+            let filtered = filteredParagraphs;
+
+            if (qualityFilter !== 'all') {
+                filtered = filteredParagraphs.filter(para => {
+                    const score = para.quality_score;
+                    if (qualityFilter === 'high') return score >= 0.7;
+                    if (qualityFilter === 'medium') return score >= 0.3 && score < 0.7;
+                    if (qualityFilter === 'low') return score < 0.3;
+                    return true;
+                });
+            }
+
+            renderParagraphs(filtered);
+        }
+
+        // 排序段落
+        function sortParagraphs() {
+            const sortBy = document.getElementById('sort-paragraphs').value;
+            filteredParagraphs.sort((a, b) => {
+                if (sortBy === 'index') return a.index - b.index;
+                if (sortBy === 'quality_score') return b.quality_score - a.quality_score;
+                if (sortBy === 'doc_id') return a.doc_id.localeCompare(b.doc_id);
+                return 0;
+            });
+            filterParagraphs(); // 重新应用过滤和渲染
+        }
+
+        // 查看文档详情
+        async function viewDocument(docId) {
+            const modal = document.getElementById('document-modal');
+            const detailDiv = document.getElementById('document-detail');
+
+            modal.style.display = 'block';
+            detailDiv.innerHTML = '<div class="loading">加载文档详情中...</div>';
+
+            try {
+                const response = await fetch(`/api/document_detail/${docId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const doc = data.document;
+                    detailDiv.innerHTML = `
+                        <h2>${doc.title}</h2>
+                        <div class="document-meta" style="margin-bottom: 20px;">
+                            <span>📄 ${doc.content_length} 字符</span>
+                            <span>📝 ${doc.paragraphs_count} 段落</span>
+                            <span>📅 ${doc.created_at}</span>
+                        </div>
+                        <h3>📋 完整内容</h3>
+                        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; line-height: 1.6; white-space: pre-wrap;">${doc.content}</div>
+                        <h3>📝 段落详情 (带质量分数)</h3>
+                        <div>
+                            ${doc.paragraphs_with_scores.map(para => `
+                                <div class="paragraph-item">
+                                    <div class="paragraph-meta">
+                                        <span>段落 ${para.paragraph_index + 1}</span>
+                                        <span class="quality-score ${getQualityClass(para.quality_score)}">
+                                            质量: ${para.quality_score}
+                                        </span>
+                                    </div>
+                                    <div class="paragraph-content">${para.content}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    detailDiv.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+                }
+            } catch (error) {
+                detailDiv.innerHTML = `<div class="error">网络错误: ${error.message}</div>`;
+            }
+        }
+
+        // 切换选项卡
+        function showTab(tabName) {
+            // 隐藏所有选项卡内容
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 移除所有选项卡的active类
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 显示选中的选项卡
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // 设置模态框
+        function setupModal() {
+            const modal = document.getElementById('document-modal');
+            const closeBtn = document.querySelector('.close');
+
+            closeBtn.onclick = function() {
+                modal.style.display = 'none';
+            }
+
+            window.onclick = function(event) {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadKnowledgeBaseData();
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const container = document.querySelector('.container');
+            container.innerHTML = `<div class="error">❌ ${message}</div>` + container.innerHTML;
+        }
+    </script>
+</body>
+</html>
