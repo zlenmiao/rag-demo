@@ -9,6 +9,7 @@ import logging
 from flask import Flask, request, jsonify, render_template, Response
 from rag_system import AdvancedRAGSystem
 from image_processor import process_single_image, process_batch_images
+from data_cleaner.routes import data_cleaner_bp
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +18,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'
 rag_system = AdvancedRAGSystem()
+
+# 注册数据清洗模块蓝图
+app.register_blueprint(data_cleaner_bp)
 
 @app.route('/')
 def index():

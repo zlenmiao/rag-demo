@@ -6,10 +6,13 @@
 import os
 
 def read_api_key():
-    """从key.txt文件读取API密钥"""
+    """从key.txt文件读取API密钥（第一行）"""
     try:
         with open('key.txt', 'r', encoding='utf-8') as f:
-            return f.read().strip()    
+            lines = f.readlines()
+            if lines:
+                return lines[0].strip()
+            return ""
     except Exception as e:
         print(f"读取key.txt文件时出错: {e}")
         return ""

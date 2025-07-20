@@ -8,7 +8,9 @@
 pip install -r requirements.txt
 
 # 配置API密钥
-# 创建 key.txt 文件，填入你的AI API密钥
+# 创建 key.txt 文件
+# 第一行填入你的AI API密钥
+# 第二行填入你的数据库链接
 ```
 
 ```bash
