@@ -20,7 +20,7 @@ AI数据清洗模块是专门用于通过人工智能进行数据清洗和结构
 在根目录的 `key.txt` 文件中配置：
 ```
 your_api_key_here
-postgresql://postgres:mzl04592@localhost:5432/postgres
+postgresql://postgres:password@localhost:5432/postgres
 ```
 
 第一行：AI API密钥（根据config.py中的配置使用对应服务的密钥）
