@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from llm_client import LLMClient
 from data_cleaner.database import CleanDataDB
+from data_cleaner.pkl_storage import CleanDataPKL
 from data_cleaner.prompt_config import DEFAULT_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ class DataCleanerService:
 
     def __init__(self):
         self.llm_client = None
-        self.db = None
+        self.db = None  # PostgreSQL数据库存储
+        self.pkl_storage = None  # PKL文件存储
         self.config_loaded = False
         self._load_config()
 
@@ -42,12 +44,15 @@ class DataCleanerService:
                         # 初始化LLM客户端（使用项目现有的LLMClient）
                         self.llm_client = LLMClient()
 
-                        # 初始化数据库
+                                                # 初始化数据库存储
                         self.db = CleanDataDB(db_url)
                         self.db.create_table()
 
+                        # 初始化PKL文件存储
+                        self.pkl_storage = CleanDataPKL("cleaned_data.pkl")
+
                         self.config_loaded = True
-                        logger.info("数据清洗服务配置加载成功")
+                        logger.info("数据清洗服务配置加载成功，支持数据库和PKL双存储")
                     else:
                         logger.error("配置文件格式错误")
             else:
@@ -180,13 +185,14 @@ class DataCleanerService:
 
         return True
 
-    def save_cleaned_data(self, original_text: str, cleaned_data: Dict) -> Dict:
+    def save_cleaned_data(self, original_text: str, cleaned_data: Dict, storage_type: str = "database") -> Dict:
         """
-        保存清洗后的数据到数据库
+        保存清洗后的数据到指定存储
 
         Args:
             original_text: 原始文本
             cleaned_data: 清洗后的数据
+            storage_type: 存储类型，"database" 或 "pkl"
 
         Returns:
             保存结果
@@ -198,18 +204,48 @@ class DataCleanerService:
             }
 
         try:
-            record_id = self.db.save_cleaned_data(original_text, cleaned_data)
-            if record_id:
-                return {
-                    "success": True,
-                    "record_id": record_id,
-                    "message": "数据保存成功"
-                }
+            if storage_type == "pkl":
+                # 保存到PKL文件
+                if not self.pkl_storage:
+                    return {
+                        "success": False,
+                        "error": "PKL存储未初始化"
+                    }
+
+                record_id = self.pkl_storage.save_cleaned_data(original_text, cleaned_data)
+                if record_id:
+                    return {
+                        "success": True,
+                        "record_id": record_id,
+                        "message": "数据已保存到PKL文件",
+                        "storage_type": "pkl"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "PKL文件保存失败"
+                    }
             else:
-                return {
-                    "success": False,
-                    "error": "数据保存失败"
-                }
+                # 保存到数据库
+                if not self.db:
+                    return {
+                        "success": False,
+                        "error": "数据库存储未初始化"
+                    }
+
+                record_id = self.db.save_cleaned_data(original_text, cleaned_data)
+                if record_id:
+                    return {
+                        "success": True,
+                        "record_id": record_id,
+                        "message": "数据已保存到数据库",
+                        "storage_type": "database"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "数据库保存失败"
+                    }
         except Exception as e:
             logger.error(f"保存数据时发生错误: {e}")
             return {
@@ -217,13 +253,14 @@ class DataCleanerService:
                 "error": f"保存失败: {str(e)}"
             }
 
-    def get_cleaned_data_list(self, limit: int = 50, offset: int = 0) -> Dict:
+    def get_cleaned_data_list(self, limit: int = 50, offset: int = 0, storage_type: str = "database") -> Dict:
         """
         获取清洗后的数据列表
 
         Args:
             limit: 限制数量
             offset: 偏移量
+            storage_type: 存储类型，"database" 或 "pkl"
 
         Returns:
             数据列表
@@ -235,14 +272,40 @@ class DataCleanerService:
             }
 
         try:
-            data_list = self.db.get_cleaned_data(limit, offset)
-            stats = self.db.get_statistics()
+            if storage_type == "pkl":
+                # 从PKL文件获取数据
+                if not self.pkl_storage:
+                    return {
+                        "success": False,
+                        "error": "PKL存储未初始化"
+                    }
 
-            return {
-                "success": True,
-                "data": data_list,
-                "statistics": stats
-            }
+                data_list = self.pkl_storage.get_cleaned_data(limit, offset)
+                stats = self.pkl_storage.get_statistics()
+
+                return {
+                    "success": True,
+                    "data": data_list,
+                    "statistics": stats,
+                    "storage_type": "pkl"
+                }
+            else:
+                # 从数据库获取数据
+                if not self.db:
+                    return {
+                        "success": False,
+                        "error": "数据库存储未初始化"
+                    }
+
+                data_list = self.db.get_cleaned_data(limit, offset)
+                stats = self.db.get_statistics()
+
+                return {
+                    "success": True,
+                    "data": data_list,
+                    "statistics": stats,
+                    "storage_type": "database"
+                }
         except Exception as e:
             logger.error(f"获取数据列表时发生错误: {e}")
             return {
@@ -250,12 +313,13 @@ class DataCleanerService:
                 "error": f"获取数据失败: {str(e)}"
             }
 
-    def get_cleaned_data_by_id(self, data_id: int) -> Dict:
+    def get_cleaned_data_by_id(self, data_id: int, storage_type: str = "database") -> Dict:
         """
         根据ID获取清洗后的数据
 
         Args:
             data_id: 数据ID
+            storage_type: 存储类型，"database" 或 "pkl"
 
         Returns:
             数据详情
@@ -267,11 +331,30 @@ class DataCleanerService:
             }
 
         try:
-            data = self.db.get_cleaned_data_by_id(data_id)
+            if storage_type == "pkl":
+                # 从PKL文件获取数据
+                if not self.pkl_storage:
+                    return {
+                        "success": False,
+                        "error": "PKL存储未初始化"
+                    }
+
+                data = self.pkl_storage.get_cleaned_data_by_id(data_id)
+            else:
+                # 从数据库获取数据
+                if not self.db:
+                    return {
+                        "success": False,
+                        "error": "数据库存储未初始化"
+                    }
+
+                data = self.db.get_cleaned_data_by_id(data_id)
+
             if data:
                 return {
                     "success": True,
-                    "data": data
+                    "data": data,
+                    "storage_type": storage_type
                 }
             else:
                 return {
@@ -285,13 +368,14 @@ class DataCleanerService:
                 "error": f"获取数据失败: {str(e)}"
             }
 
-    def update_cleaned_data(self, data_id: int, cleaned_data: Dict) -> Dict:
+    def update_cleaned_data(self, data_id: int, cleaned_data: Dict, storage_type: str = "database") -> Dict:
         """
         更新清洗后的数据
 
         Args:
             data_id: 数据ID
             cleaned_data: 更新的数据
+            storage_type: 存储类型，"database" 或 "pkl"
 
         Returns:
             更新结果
@@ -310,11 +394,30 @@ class DataCleanerService:
                     "error": "数据格式不符合要求"
                 }
 
-            success = self.db.update_cleaned_data(data_id, cleaned_data)
+            if storage_type == "pkl":
+                # 更新PKL文件中的数据
+                if not self.pkl_storage:
+                    return {
+                        "success": False,
+                        "error": "PKL存储未初始化"
+                    }
+
+                success = self.pkl_storage.update_cleaned_data(data_id, cleaned_data)
+            else:
+                # 更新数据库中的数据
+                if not self.db:
+                    return {
+                        "success": False,
+                        "error": "数据库存储未初始化"
+                    }
+
+                success = self.db.update_cleaned_data(data_id, cleaned_data)
+
             if success:
                 return {
                     "success": True,
-                    "message": "数据更新成功"
+                    "message": "数据更新成功",
+                    "storage_type": storage_type
                 }
             else:
                 return {
@@ -328,12 +431,13 @@ class DataCleanerService:
                 "error": f"更新失败: {str(e)}"
             }
 
-    def delete_cleaned_data(self, data_id: int) -> Dict:
+    def delete_cleaned_data(self, data_id: int, storage_type: str = "database") -> Dict:
         """
         删除清洗后的数据
 
         Args:
             data_id: 数据ID
+            storage_type: 存储类型，"database" 或 "pkl"
 
         Returns:
             删除结果
@@ -345,11 +449,30 @@ class DataCleanerService:
             }
 
         try:
-            success = self.db.delete_cleaned_data(data_id)
+            if storage_type == "pkl":
+                # 从PKL文件删除数据
+                if not self.pkl_storage:
+                    return {
+                        "success": False,
+                        "error": "PKL存储未初始化"
+                    }
+
+                success = self.pkl_storage.delete_cleaned_data(data_id)
+            else:
+                # 从数据库删除数据
+                if not self.db:
+                    return {
+                        "success": False,
+                        "error": "数据库存储未初始化"
+                    }
+
+                success = self.db.delete_cleaned_data(data_id)
+
             if success:
                 return {
                     "success": True,
-                    "message": "数据删除成功"
+                    "message": "数据删除成功",
+                    "storage_type": storage_type
                 }
             else:
                 return {

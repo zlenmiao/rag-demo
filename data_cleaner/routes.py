@@ -62,7 +62,7 @@ def clean_data():
 
 @data_cleaner_bp.route('/save_data', methods=['POST'])
 def save_data():
-    """保存清洗后的数据到数据库"""
+    """保存清洗后的数据到指定存储"""
     try:
         data = request.json
         if not data:
@@ -73,6 +73,7 @@ def save_data():
 
         original_text = data.get('original_text')
         cleaned_data = data.get('cleaned_data')
+        storage_type = data.get('storage_type', 'database')  # 默认使用数据库
 
         if not original_text or not cleaned_data:
             return jsonify({
@@ -80,8 +81,15 @@ def save_data():
                 "error": "原文和清洗后的数据都不能为空"
             })
 
+        # 验证存储类型
+        if storage_type not in ['database', 'pkl']:
+            return jsonify({
+                "success": False,
+                "error": "存储类型只能是 'database' 或 'pkl'"
+            })
+
         # 调用保存服务
-        result = data_cleaner_service.save_cleaned_data(original_text, cleaned_data)
+        result = data_cleaner_service.save_cleaned_data(original_text, cleaned_data, storage_type)
         return jsonify(result)
 
     except Exception as e:
@@ -96,8 +104,16 @@ def get_data_list():
     try:
         limit = int(request.args.get('limit', 50))
         offset = int(request.args.get('offset', 0))
+        storage_type = request.args.get('storage_type', 'database')
 
-        result = data_cleaner_service.get_cleaned_data_list(limit, offset)
+        # 验证存储类型
+        if storage_type not in ['database', 'pkl']:
+            return jsonify({
+                "success": False,
+                "error": "存储类型只能是 'database' 或 'pkl'"
+            })
+
+        result = data_cleaner_service.get_cleaned_data_list(limit, offset, storage_type)
         return jsonify(result)
 
     except Exception as e:
@@ -110,7 +126,16 @@ def get_data_list():
 def get_data_detail(data_id):
     """获取指定ID的数据详情"""
     try:
-        result = data_cleaner_service.get_cleaned_data_by_id(data_id)
+        storage_type = request.args.get('storage_type', 'database')
+
+        # 验证存储类型
+        if storage_type not in ['database', 'pkl']:
+            return jsonify({
+                "success": False,
+                "error": "存储类型只能是 'database' 或 'pkl'"
+            })
+
+        result = data_cleaner_service.get_cleaned_data_by_id(data_id, storage_type)
         return jsonify(result)
 
     except Exception as e:
@@ -131,13 +156,22 @@ def update_data(data_id):
             })
 
         cleaned_data = data.get('cleaned_data')
+        storage_type = data.get('storage_type', 'database')
+
         if not cleaned_data:
             return jsonify({
                 "success": False,
                 "error": "请提供清洗后的数据"
             })
 
-        result = data_cleaner_service.update_cleaned_data(data_id, cleaned_data)
+        # 验证存储类型
+        if storage_type not in ['database', 'pkl']:
+            return jsonify({
+                "success": False,
+                "error": "存储类型只能是 'database' 或 'pkl'"
+            })
+
+        result = data_cleaner_service.update_cleaned_data(data_id, cleaned_data, storage_type)
         return jsonify(result)
 
     except Exception as e:
@@ -150,7 +184,16 @@ def update_data(data_id):
 def delete_data(data_id):
     """删除指定ID的数据"""
     try:
-        result = data_cleaner_service.delete_cleaned_data(data_id)
+        storage_type = request.args.get('storage_type', 'database')
+
+        # 验证存储类型
+        if storage_type not in ['database', 'pkl']:
+            return jsonify({
+                "success": False,
+                "error": "存储类型只能是 'database' 或 'pkl'"
+            })
+
+        result = data_cleaner_service.delete_cleaned_data(data_id, storage_type)
         return jsonify(result)
 
     except Exception as e:
@@ -168,10 +211,82 @@ def get_service_status():
             "service_status": "运行中",
             "config_loaded": data_cleaner_service.config_loaded,
             "llm_available": data_cleaner_service.llm_client is not None,
-            "db_available": data_cleaner_service.db is not None
+            "db_available": data_cleaner_service.db is not None,
+            "pkl_available": data_cleaner_service.pkl_storage is not None
         })
     except Exception as e:
         return jsonify({
             "success": False,
             "error": f"获取服务状态失败: {str(e)}"
         })
+
+@data_cleaner_bp.route('/export_pkl_to_json', methods=['POST'])
+def export_pkl_to_json():
+    """导出PKL数据到JSON文件"""
+    try:
+        if not data_cleaner_service.pkl_storage:
+            return jsonify({
+                "success": False,
+                "error": "PKL存储未初始化"
+            })
+
+        json_file = data_cleaner_service.pkl_storage.export_to_json()
+        return jsonify({
+            "success": True,
+            "message": "数据导出成功",
+            "json_file": json_file
+        })
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"导出失败: {str(e)}"
+        })
+
+@data_cleaner_bp.route('/import_json_to_pkl', methods=['POST'])
+def import_json_to_pkl():
+    """从JSON文件导入数据到PKL"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "请提供有效的JSON数据"
+            })
+
+        json_file = data.get('json_file')
+        if not json_file:
+            return jsonify({
+                "success": False,
+                "error": "请提供JSON文件路径"
+            })
+
+        if not data_cleaner_service.pkl_storage:
+            return jsonify({
+                "success": False,
+                "error": "PKL存储未初始化"
+            })
+
+        success = data_cleaner_service.pkl_storage.import_from_json(json_file)
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "数据导入成功"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "数据导入失败"
+            })
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"导入失败: {str(e)}"
+        })
+
+@data_cleaner_bp.route('/viewer')
+def data_viewer():
+    """数据查看页面"""
+    return render_template('data_viewer.html')

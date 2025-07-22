@@ -229,12 +229,22 @@
                             <input type="file" id="fileInput" accept=".txt,.jpg,.jpeg,.png,.gif" style="display: none;">
                         </div>
                         <div class="d-flex justify-content-end mt-3">
+                            <div class="me-3">
+                                <label class="form-label" style="font-size: 12px; margin-bottom: 2px;">存储方式</label>
+                                <select class="form-select form-select-sm" id="storageType" style="width: 120px;">
+                                    <option value="database">数据库</option>
+                                    <option value="pkl">PKL文件</option>
+                                </select>
+                            </div>
                             <button class="btn btn-primary btn-action" id="cleanBtn" disabled>
                                 <i class="fas fa-broom"></i> 数据清洗
                             </button>
                             <button class="btn btn-success btn-action" id="saveBtn" disabled>
                                 <i class="fas fa-database"></i> 数据入库
                             </button>
+                            <a href="/data_cleaner/viewer" class="btn btn-info btn-action">
+                                <i class="fas fa-eye"></i> 查看数据
+                            </a>
                         </div>
                         <div class="status-message" id="statusMessage"></div>
                         <div class="loading" id="loadingIndicator">
@@ -316,11 +326,27 @@
         const resetPromptBtn = document.getElementById('resetPromptBtn');
         const statusMessage = document.getElementById('statusMessage');
         const loadingIndicator = document.getElementById('loadingIndicator');
+        const storageType = document.getElementById('storageType');
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
             loadDefaultPrompt();
+            updateSaveButtonText();
         });
+
+        // 更新保存按钮文字
+        function updateSaveButtonText() {
+            const selectedStorage = storageType.value;
+            const saveButton = document.getElementById('saveBtn');
+            if (selectedStorage === 'pkl') {
+                saveButton.innerHTML = '<i class="fas fa-save"></i> 保存到PKL';
+            } else {
+                saveButton.innerHTML = '<i class="fas fa-database"></i> 数据入库';
+            }
+        }
+
+        // 存储方式变化监听
+        storageType.addEventListener('change', updateSaveButtonText);
 
         // 加载默认提示词
         async function loadDefaultPrompt() {
@@ -639,13 +665,15 @@
                     },
                     body: JSON.stringify({
                         original_text: originalText,
-                        cleaned_data: cleanedData
+                        cleaned_data: cleanedData,
+                        storage_type: storageType.value // 添加存储方式
                     })
                 });
 
                 const result = await response.json();
                 if (result.success) {
-                    showStatus(`数据保存成功，记录ID: ${result.record_id}`, 'success');
+                    const storageTypeText = result.storage_type === 'pkl' ? 'PKL文件' : '数据库';
+                    showStatus(`数据保存成功，已保存到${storageTypeText}，记录ID: ${result.record_id}`, 'success');
                 } else {
                     showStatus('数据保存失败: ' + result.error, 'error');
                 }
