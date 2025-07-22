@@ -22,7 +22,28 @@ class CleanDataDB:
     def connect(self):
         """连接数据库"""
         try:
-            self.connection = psycopg2.connect(self.db_url)
+            # Supabase需要SSL连接，添加SSL参数
+            if 'supabase.co' in self.db_url:
+                # 为Supabase添加SSL配置
+                ssl_params = "?sslmode=require"
+                if '?' not in self.db_url:
+                    db_url_with_ssl = self.db_url + ssl_params
+                else:
+                    db_url_with_ssl = self.db_url + "&sslmode=require"
+
+                # 添加连接超时和其他优化参数
+                self.connection = psycopg2.connect(
+                    db_url_with_ssl,
+                    connect_timeout=10,
+                    application_name='rag_data_cleaner'
+                )
+            else:
+                # 本地或其他数据库
+                self.connection = psycopg2.connect(
+                    self.db_url,
+                    connect_timeout=10,
+                    application_name='rag_data_cleaner'
+                )
             return True
         except Exception as e:
             logger.error(f"数据库连接失败: {e}")
@@ -64,39 +85,85 @@ class CleanDataDB:
                 self.connection.rollback()
             return False
 
-    def save_cleaned_data(self, original_text: str, cleaned_data: Dict) -> Optional[int]:
-        """保存清洗后的数据"""
+    def _ensure_connection(self):
+        """确保数据库连接有效，如果断开则重连"""
         try:
             if not self.connection:
-                self.connect()
+                return self.connect()
 
-            insert_sql = """
-            INSERT INTO cleaned_data (original_text, cleaned_data, created_at, updated_at)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id;
-            """
-
-            now = datetime.now()
-
-            with self.connection.cursor() as cursor:
-                cursor.execute(insert_sql, (
-                    original_text,
-                    json.dumps(cleaned_data, ensure_ascii=False),
-                    now,
-                    now
-                ))
-
-                record_id = cursor.fetchone()[0]
-                self.connection.commit()
-
-                logger.info(f"数据保存成功，ID: {record_id}")
-                return record_id
-
+            # 检查连接是否仍然有效
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+            cursor.close()
+            return True
         except Exception as e:
-            logger.error(f"保存数据失败: {e}")
-            if self.connection:
-                self.connection.rollback()
-            return None
+            logger.warning(f"数据库连接检查失败，尝试重连: {e}")
+            try:
+                if self.connection:
+                    self.connection.close()
+                self.connection = None
+                return self.connect()
+            except Exception as reconnect_error:
+                logger.error(f"数据库重连失败: {reconnect_error}")
+                return False
+
+    def save_cleaned_data(self, original_text: str, cleaned_data: Dict) -> Optional[int]:
+        """保存清洗后的数据"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 确保连接有效
+                if not self._ensure_connection():
+                    if attempt < max_retries - 1:
+                        logger.warning(f"连接失败，尝试第 {attempt + 2} 次...")
+                        continue
+                    else:
+                        logger.error("多次连接尝试失败")
+                        return None
+
+                insert_sql = """
+                INSERT INTO cleaned_data (original_text, cleaned_data, created_at, updated_at)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id;
+                """
+
+                now = datetime.now()
+
+                with self.connection.cursor() as cursor:
+                    cursor.execute(insert_sql, (
+                        original_text,
+                        json.dumps(cleaned_data, ensure_ascii=False),
+                        now,
+                        now
+                    ))
+
+                    record_id = cursor.fetchone()[0]
+                    self.connection.commit()
+
+                    logger.info(f"数据保存成功，ID: {record_id}")
+                    return record_id
+
+            except Exception as e:
+                logger.error(f"保存数据失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if self.connection:
+                    try:
+                        self.connection.rollback()
+                    except:
+                        pass
+
+                # 如果是连接相关错误，标记连接为无效
+                if "connection" in str(e).lower() or "server closed" in str(e).lower():
+                    self.connection = None
+
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+                else:
+                    return None
+
+        return None
 
     def get_cleaned_data(self, limit: int = 50, offset: int = 0) -> List[Dict]:
         """获取清洗后的数据列表"""

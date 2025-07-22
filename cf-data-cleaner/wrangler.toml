@@ -1,0 +1,24 @@
+name = "cf-data-cleaner"
+main = "src/index.js"
+compatibility_date = "2023-12-18"
+
+# 环境变量 - 在部署时通过wrangler secret设置
+# wrangler secret put AI_API_KEY
+# wrangler secret put SUPABASE_URL
+# wrangler secret put SUPABASE_ANON_KEY
+# wrangler secret put SUPABASE_SERVICE_KEY
+
+# 环境变量
+[vars]
+ENVIRONMENT = "production"
+
+# D1 数据库绑定（如果需要本地数据库支持）
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "data-cleaner-db"
+# database_id = "your-d1-database-id"
+
+# KV存储绑定（用于缓存）
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "your-kv-namespace-id"

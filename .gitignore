@@ -210,3 +210,19 @@ __marimo__/
 *.pkl.backup
 key.txt
 .cursor
+
+# Cloudflare Workers specific
+cf-data-cleaner/node_modules/
+cf-data-cleaner/.wrangler/
+cf-data-cleaner/.env
+cf-data-cleaner/.dev.vars
+cf-data-cleaner/dist/
+cf-data-cleaner/build/
+cf-data-cleaner/*.log
+cf-data-cleaner/.DS_Store
+cf-data-cleaner/npm-debug.log*
+cf-data-cleaner/yarn-debug.log*
+cf-data-cleaner/yarn-error.log*
+
+# Wrangler secrets and config
+cf-data-cleaner/wrangler.toml.backup

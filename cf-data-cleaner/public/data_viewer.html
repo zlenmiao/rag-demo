@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清洗数据查看器</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .header-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .stats-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .data-table {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .table-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .chunk-preview {
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 12px;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .keyword-tag {
+            background: #007bff;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-right: 4px;
+            display: inline-block;
+            margin-bottom: 2px;
+        }
+        .category-badge {
+            background: #28a745;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+        .action-btn {
+            padding: 5px 10px;
+            margin: 2px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-view {
+            background: #17a2b8;
+            color: white;
+        }
+        .btn-edit {
+            background: #ffc107;
+            color: #212529;
+        }
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        .pagination-wrapper {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #dee2e6;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+            border-radius: 10px 10px 0 0;
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #dee2e6;
+            background: #f8f9fa;
+            border-radius: 0 0 10px 10px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .btn-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #6c757d;
+            cursor: pointer;
+        }
+        .detail-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .original-text {
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: white;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        .search-controls {
+            margin-bottom: 20px;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- 页面标题 -->
+        <div class="header-card">
+            <div class="row align-items-center">
+                <div class="col-md-12">
+                    <h1 class="mb-2">
+                        <i class="fas fa-database"></i> 清洗数据查看器
+                    </h1>
+                    <p class="mb-0">查看和管理AI数据清洗结果 - Supabase数据库</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="row mb-4" id="statsRow">
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <div class="stats-number" id="totalRecords">-</div>
+                    <div class="text-muted">总记录数</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <div class="stats-number" id="recentRecords">-</div>
+                    <div class="text-muted">最近7天</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <div class="stats-number" id="avgTextLength">-</div>
+                    <div class="text-muted">平均文本长度</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <div class="stats-number" id="storageSize">-</div>
+                    <div class="text-muted">数据库大小(MB)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="data-table">
+            <div class="table-header">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list"></i>
+                            清洗数据列表
+                            <span class="badge bg-primary">Supabase数据库</span>
+                        </h5>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-end gap-2">
+                            <input type="text" class="form-control form-control-sm" id="searchInput"
+                                   placeholder="搜索原文内容..." style="width: 200px;">
+                            <button class="btn btn-outline-primary btn-sm" onclick="refreshData()">
+                                <i class="fas fa-refresh"></i> 刷新
+                            </button>
+                            <a href="data_cleaner.html" class="btn btn-primary btn-sm">
+                                <i class="fas fa-plus"></i> 清洗数据
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingIndicator" class="loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="mt-2">正在加载数据...</div>
+            </div>
+
+            <div id="dataContainer" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="8%">ID</th>
+                                <th width="30%">原文预览</th>
+                                <th width="25%">清洗结果</th>
+                                <th width="15%">创建时间</th>
+                                <th width="12%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-wrapper">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div class="text-muted" id="paginationInfo">
+                                显示第 1-10 条，共 0 条记录
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <nav>
+                                <ul class="pagination pagination-sm justify-content-end mb-0" id="pagination">
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox fa-3x mb-3 text-muted"></i>
+                <h5>暂无数据</h5>
+                <p class="text-muted">数据库中没有清洗后的数据</p>
+                <a href="data_cleaner.html" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> 去清洗数据
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let pageSize = 10;
+        let totalRecords = 0;
+        let searchQuery = '';
+
+        // API 基础URL - 修改为您的CF Workers URL
+        const API_BASE_URL = 'https://cf-data-cleaner.coder-zlen.workers.dev';
+
+        // DOM 元素
+        const dataTableBody = document.getElementById('dataTableBody');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const dataContainer = document.getElementById('dataContainer');
+        const emptyState = document.getElementById('emptyState');
+        const searchInput = document.getElementById('searchInput');
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initEventListeners();
+            loadData();
+        });
+
+        // 初始化事件监听器
+        function initEventListeners() {
+            // 搜索功能
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    searchQuery = this.value.trim();
+                    currentPage = 1;
+                    loadData();
+                }, 500);
+            });
+        }
+
+        // 加载数据
+        async function loadData() {
+            showLoading();
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/data_cleaner/data_list?limit=${pageSize}&offset=${(currentPage - 1) * pageSize}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    updateStatistics(result.statistics);
+                    displayData(result.data);
+                    totalRecords = result.statistics?.total_records || 0;
+                    updatePagination();
+                } else {
+                    showError(result.error || '加载数据失败');
+                }
+            } catch (error) {
+                showError('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 更新统计信息
+        function updateStatistics(stats) {
+            document.getElementById('totalRecords').textContent = stats.total_records || 0;
+            document.getElementById('recentRecords').textContent = stats.recent_records || 0;
+            document.getElementById('avgTextLength').textContent = Math.round(stats.avg_text_length || 0);
+            document.getElementById('storageSize').textContent = `${stats.file_size || 0}`;
+        }
+
+        // 显示数据
+        function displayData(data) {
+            if (!data || data.length === 0) {
+                showEmptyState();
+                return;
+            }
+
+            let html = '';
+            data.forEach(record => {
+                const chunks = record.cleaned_data?.chunks || [];
+                const firstChunk = chunks[0] || {};
+
+                html += `
+                    <tr>
+                        <td>
+                            <strong>#${record.id}</strong>
+                        </td>
+                        <td>
+                            <div class="original-text" style="max-height: 80px; overflow-y: auto;">
+                                ${escapeHtml(record.original_text?.substring(0, 200) || '')}
+                                ${(record.original_text?.length || 0) > 200 ? '...' : ''}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="chunk-preview">
+                                <div class="mb-1">
+                                    <strong>摘要:</strong> ${escapeHtml(firstChunk.summary || '')}
+                                </div>
+                                <div class="mb-1">
+                                    <strong>关键词:</strong>
+                                    ${(firstChunk.keywords || []).map(kw =>
+                                        `<span class="keyword-tag">${escapeHtml(kw)}</span>`
+                                    ).join('')}
+                                </div>
+                                <div class="mb-1">
+                                    <strong>分类:</strong>
+                                    <span class="category-badge">${escapeHtml(firstChunk.category || '')}</span>
+                                </div>
+                                ${chunks.length > 1 ? `<div class="text-muted">+${chunks.length - 1} 个段落</div>` : ''}
+                            </div>
+                        </td>
+                        <td>
+                            <small>
+                                ${formatDate(record.created_at)}<br>
+                                <span class="text-muted">${formatDate(record.updated_at)}</span>
+                            </small>
+                        </td>
+                        <td>
+                            <button class="action-btn btn-view" onclick="viewRecord(${record.id})" title="查看详情">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="action-btn btn-edit" onclick="editRecord(${record.id})" title="编辑">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-btn btn-delete" onclick="deleteRecord(${record.id})" title="删除">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            dataTableBody.innerHTML = html;
+            showDataContainer();
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            loadingIndicator.style.display = 'block';
+            dataContainer.style.display = 'none';
+            emptyState.style.display = 'none';
+        }
+
+        // 显示数据容器
+        function showDataContainer() {
+            loadingIndicator.style.display = 'none';
+            dataContainer.style.display = 'block';
+            emptyState.style.display = 'none';
+        }
+
+        // 显示空状态
+        function showEmptyState() {
+            loadingIndicator.style.display = 'none';
+            dataContainer.style.display = 'none';
+            emptyState.style.display = 'block';
+        }
+
+        // 显示错误
+        function showError(message) {
+            showEmptyState();
+            const emptyStateElement = document.getElementById('emptyState');
+            emptyStateElement.innerHTML = `
+                <i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i>
+                <h5>加载失败</h5>
+                <p class="text-muted">${escapeHtml(message)}</p>
+                <button class="btn btn-primary" onclick="loadData()">
+                    <i class="fas fa-refresh"></i> 重试
+                </button>
+            `;
+        }
+
+        // 更新分页
+        function updatePagination() {
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            const startRecord = (currentPage - 1) * pageSize + 1;
+            const endRecord = Math.min(currentPage * pageSize, totalRecords);
+
+            // 更新信息
+            document.getElementById('paginationInfo').textContent =
+                `显示第 ${startRecord}-${endRecord} 条，共 ${totalRecords} 条记录`;
+
+            // 生成分页
+            const pagination = document.getElementById('pagination');
+            let paginationHtml = '';
+
+            // 上一页
+            const prevDisabled = currentPage === 1 ? 'disabled' : '';
+            paginationHtml += `
+                <li class="page-item ${prevDisabled}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">上一页</a>
+                </li>
+            `;
+
+            // 页码
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                const active = i === currentPage ? 'active' : '';
+                paginationHtml += `
+                    <li class="page-item ${active}">
+                        <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                    </li>
+                `;
+            }
+
+            // 下一页
+            const nextDisabled = currentPage === totalPages ? 'disabled' : '';
+            paginationHtml += `
+                <li class="page-item ${nextDisabled}">
+                    <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">下一页</a>
+                </li>
+            `;
+
+            pagination.innerHTML = paginationHtml;
+        }
+
+        // 切换页面
+        function changePage(page) {
+            if (page < 1 || page > Math.ceil(totalRecords / pageSize)) return;
+            currentPage = page;
+            loadData();
+        }
+
+        // 查看记录详情
+        async function viewRecord(id) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/data_cleaner/data/${id}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    showDetailModal(result.data, false);
+                } else {
+                    alert('获取详情失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 编辑记录
+        async function editRecord(id) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/data_cleaner/data/${id}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    showDetailModal(result.data, true);
+                } else {
+                    alert('获取详情失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 删除记录
+        async function deleteRecord(id) {
+            if (!confirm('确定要删除这条记录吗？删除后无法恢复。')) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/data_cleaner/data/${id}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('删除成功');
+                    loadData();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 显示详情模态框
+        function showDetailModal(record, isEdit) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h5>${isEdit ? '编辑' : '查看'}记录 #${record.id}</h5>
+                        <button type="button" class="btn-close" onclick="closeModal()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="detail-item">
+                            <div class="detail-label">原文内容</div>
+                            <div class="original-text">${escapeHtml(record.original_text || '')}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">清洗结果</div>
+                            <div id="chunksContainer">
+                                ${renderChunks(record.cleaned_data?.chunks || [], isEdit)}
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="detail-item">
+                                    <div class="detail-label">创建时间</div>
+                                    <div>${formatDate(record.created_at)}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="detail-item">
+                                    <div class="detail-label">更新时间</div>
+                                    <div>${formatDate(record.updated_at)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+                            ${isEdit ? '取消' : '关闭'}
+                        </button>
+                        ${isEdit ? `<button type="button" class="btn btn-primary" onclick="saveRecord(${record.id})">保存修改</button>` : ''}
+                    </div>
+                </div>
+            `;
+
+            modal.addEventListener('click', closeModal);
+            document.body.appendChild(modal);
+        }
+
+        // 渲染chunks
+        function renderChunks(chunks, isEdit) {
+            return chunks.map((chunk, index) => `
+                <div class="chunk-item border p-3 mb-3 rounded">
+                    <h6>段落 ${index + 1}</h6>
+                    <div class="mb-2">
+                        <label class="form-label">摘要</label>
+                        ${isEdit ?
+                            `<textarea class="form-control chunk-summary" rows="2">${escapeHtml(chunk.summary || '')}</textarea>` :
+                            `<div class="form-control-plaintext">${escapeHtml(chunk.summary || '')}</div>`
+                        }
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">关键词</label>
+                        ${isEdit ?
+                            `<input type="text" class="form-control chunk-keywords" value="${(chunk.keywords || []).join(',')}">` :
+                            `<div class="form-control-plaintext">
+                                ${(chunk.keywords || []).map(kw => `<span class="keyword-tag">${escapeHtml(kw)}</span>`).join('')}
+                            </div>`
+                        }
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">分类</label>
+                        ${isEdit ?
+                            `<input type="text" class="form-control chunk-category" value="${escapeHtml(chunk.category || '')}">` :
+                            `<div class="form-control-plaintext">
+                                <span class="category-badge">${escapeHtml(chunk.category || '')}</span>
+                            </div>`
+                        }
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">搜索向量</label>
+                        ${isEdit ?
+                            `<textarea class="form-control chunk-search-vector" rows="2">${escapeHtml(chunk.search_vector || '')}</textarea>` :
+                            `<div class="form-control-plaintext">${escapeHtml(chunk.search_vector || '')}</div>`
+                        }
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 保存记录
+        async function saveRecord(id) {
+            try {
+                // 收集编辑后的数据
+                const chunks = [];
+                const chunkItems = document.querySelectorAll('.chunk-item');
+
+                chunkItems.forEach(item => {
+                    const summary = item.querySelector('.chunk-summary').value.trim();
+                    const keywordsText = item.querySelector('.chunk-keywords').value.trim();
+                    const category = item.querySelector('.chunk-category').value.trim();
+                    const searchVector = item.querySelector('.chunk-search-vector').value.trim();
+
+                    const keywords = keywordsText ? keywordsText.split(',').map(kw => kw.trim()).filter(kw => kw) : [];
+
+                    chunks.push({
+                        summary,
+                        keywords,
+                        category,
+                        search_vector: searchVector
+                    });
+                });
+
+                const response = await fetch(`${API_BASE_URL}/data_cleaner/data/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        cleaned_data: { chunks }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('保存成功');
+                    closeModal();
+                    loadData();
+                } else {
+                    alert('保存失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            const modal = document.querySelector('.modal-overlay');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadData();
+        }
+
+        // 工具函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+    </script>
+</body>
+</html>
