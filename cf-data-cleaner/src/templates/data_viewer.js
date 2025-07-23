@@ -1,0 +1,528 @@
+// 数据查看页面HTML模板
+export const dataViewerHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>清洗数据查看器</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .header-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px; padding: 30px; margin-bottom: 30px; }
+        .stats-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .stats-number { font-size: 2em; font-weight: bold; color: #007bff; }
+        .data-table { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .table-header { background: #f8f9fa; padding: 20px; border-bottom: 1px solid #dee2e6; }
+        .chunk-preview { max-height: 100px; overflow-y: auto; font-size: 12px; background: #f8f9fa; padding: 8px; border-radius: 5px; margin-bottom: 5px; }
+        .keyword-tag { background: #007bff; color: white; padding: 2px 6px; border-radius: 12px; font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px; }
+        .category-badge { background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; }
+        .action-btn { padding: 5px 10px; margin: 2px; border-radius: 5px; border: none; cursor: pointer; font-size: 12px; }
+        .btn-view { background: #17a2b8; color: white; }
+        .btn-edit { background: #ffc107; color: #212529; }
+        .btn-delete { background: #dc3545; color: white; }
+        .pagination-wrapper { padding: 20px; background: white; border-top: 1px solid #dee2e6; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; border-radius: 10px 10px 0 0; }
+        .modal-body { padding: 20px; }
+        .modal-footer { padding: 15px 20px; border-top: 1px solid #dee2e6; background: #f8f9fa; border-radius: 0 0 10px 10px; display: flex; justify-content: flex-end; gap: 10px; }
+        .btn-close { background: none; border: none; font-size: 24px; color: #6c757d; cursor: pointer; }
+        .detail-item { margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; }
+        .detail-label { font-weight: bold; color: #495057; margin-bottom: 5px; }
+        .original-text { max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; background: white; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px; }
+        .loading { text-align: center; padding: 40px; color: #6c757d; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #6c757d; }
+        .search-controls { margin-bottom: 20px; }
+        .no-data { text-align: center; padding: 40px; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- 页面标题 -->
+        <div class="header-card">
+            <div class="row align-items-center">
+                <div class="col-md-12">
+                    <h1 class="mb-2">
+                        <i class="fas fa-database"></i> 清洗数据查看器
+                    </h1>
+                    <p class="mb-2">查看和管理AI数据清洗结果</p>
+                    <div class="alert alert-info" style="margin: 0; padding: 10px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px;">
+                        <i class="fas fa-info-circle"></i> <strong>编辑提示：</strong>点击任意记录的<strong>编辑</strong>按钮可修改摘要、关键词、分类和搜索向量等所有字段
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="data-table">
+            <div class="table-header">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list"></i>
+                            清洗数据列表
+                            <span class="badge bg-primary">数据库</span>
+                        </h5>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-end gap-2">
+                            <input type="text" class="form-control form-control-sm" id="searchInput"
+                                   placeholder="搜索原文内容..." style="width: 200px;">
+                            <button class="btn btn-outline-primary btn-sm" onclick="refreshData()">
+                                <i class="fas fa-refresh"></i> 刷新
+                            </button>
+                            <a href="/data_cleaner/" class="btn btn-primary btn-sm">
+                                <i class="fas fa-plus"></i> 清洗数据
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingIndicator" class="loading">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="mt-2">正在加载数据...</div>
+            </div>
+
+            <div id="dataContainer" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="8%">ID</th>
+                                <th width="30%">原文预览</th>
+                                <th width="25%">清洗结果</th>
+                                <th width="15%">创建时间</th>
+                                <th width="12%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination-wrapper">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div class="text-muted" id="paginationInfo">
+                                显示第 1-10 条，共 0 条记录
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <nav>
+                                <ul class="pagination pagination-sm justify-content-end mb-0" id="pagination">
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox fa-3x mb-3 text-muted"></i>
+                <h5>暂无数据</h5>
+                <p class="text-muted">数据库中没有清洗后的数据</p>
+                <p class="text-muted">💡 <strong>提示：</strong>在数据列表中，每条记录都可以通过<strong>编辑</strong>按钮修改所有字段</p>
+                <a href="/data_cleaner/" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> 去清洗数据
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局变量
+        let currentPage = 1;
+        let pageSize = 10;
+        let totalRecords = 0;
+        let searchQuery = '';
+
+        // API 基础URL - 自动使用当前域名
+        const API_BASE_URL = window.location.origin;
+
+        // DOM 元素
+        const dataTableBody = document.getElementById('dataTableBody');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const dataContainer = document.getElementById('dataContainer');
+        const emptyState = document.getElementById('emptyState');
+        const searchInput = document.getElementById('searchInput');
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initEventListeners();
+            loadData();
+        });
+
+        // 初始化事件监听器
+        function initEventListeners() {
+            // 搜索功能
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    searchQuery = this.value.trim();
+                    currentPage = 1;
+                    loadData();
+                }, 500);
+            });
+        }
+
+        // 加载数据
+        async function loadData() {
+            showLoading();
+
+            try {
+                const response = await fetch(API_BASE_URL + '/data_cleaner/data_list?limit=' + pageSize + '&offset=' + ((currentPage - 1) * pageSize));
+                const result = await response.json();
+
+                if (result.success) {
+                    displayData(result.data);
+                    totalRecords = result.data?.length || 0;
+                    updatePagination();
+                } else {
+                    showError(result.error || '加载数据失败');
+                }
+            } catch (error) {
+                showError('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 更新统计信息
+        function updateStatistics(stats) {
+            document.getElementById('totalRecords').textContent = stats.total_records || 0;
+            document.getElementById('recentRecords').textContent = stats.recent_records || 0;
+            document.getElementById('avgTextLength').textContent = Math.round(stats.avg_text_length || 0);
+            document.getElementById('storageSize').textContent = stats.file_size || 0;
+        }
+
+        // 显示数据
+        function displayData(data) {
+            if (!data || data.length === 0) {
+                showEmptyState();
+                return;
+            }
+
+            let html = '';
+            data.forEach(record => {
+                const chunks = record.cleaned_data?.chunks || [];
+                const firstChunk = chunks[0] || {};
+
+                html += '<tr>';
+                html += '<td><strong>#' + record.id + '</strong><br>';
+
+                // 添加内容类型标识
+                if (record.content_type === 'image') {
+                    html += '<span class="badge bg-success"><i class="fas fa-image"></i> 图片</span>';
+                } else {
+                    html += '<span class="badge bg-primary"><i class="fas fa-font"></i> 文本</span>';
+                }
+                html += '</td>';
+
+                html += '<td><div style="max-height: 80px; overflow-y: auto;">';
+                if (record.content_type === 'image') {
+                    html += '<div class="text-center"><i class="fas fa-image text-success"></i> 图片内容</div>';
+                    if (record.image_data) {
+                        html += '<img src="' + record.image_data + '" style="max-width: 60px; max-height: 60px; border-radius: 4px; margin-top: 5px;">';
+                    }
+                } else {
+                    html += escapeHtml(record.original_text?.substring(0, 200) || '');
+                    html += (record.original_text?.length || 0) > 200 ? '...' : '';
+                }
+                html += '</div></td>';
+                html += '<td><div class="chunk-preview">';
+                html += '<div class="mb-1"><strong>摘要:</strong> ' + escapeHtml(firstChunk.summary || '') + '</div>';
+                html += '<div class="mb-1"><strong>关键词:</strong>';
+                (firstChunk.keywords || []).forEach(kw => {
+                    html += '<span class="keyword-tag">' + escapeHtml(kw) + '</span>';
+                });
+                html += '</div>';
+                html += '<div class="mb-1"><strong>分类:</strong> <span class="category-badge">' + escapeHtml(firstChunk.category || '') + '</span></div>';
+                html += chunks.length > 1 ? '<div class="text-muted">+' + (chunks.length - 1) + ' 个段落</div>' : '';
+                html += '</div></td>';
+                html += '<td><small>' + formatDate(record.created_at) + '<br><span class="text-muted">' + formatDate(record.updated_at) + '</span></small></td>';
+                html += '<td class="text-center">';
+                html += '<div class="btn-group-vertical" role="group">';
+                html += '<button class="action-btn btn-view mb-1" onclick="viewRecord(' + record.id + ')" title="查看详情"><i class="fas fa-eye"></i></button>';
+                html += '<button class="action-btn btn-edit mb-1" onclick="editRecord(' + record.id + ')" title="编辑所有字段"><i class="fas fa-edit"></i></button>';
+                html += '<button class="action-btn btn-delete" onclick="deleteRecord(' + record.id + ')" title="删除记录"><i class="fas fa-trash"></i></button>';
+                html += '</div>';
+                html += '</td>';
+                html += '</tr>';
+            });
+
+            dataTableBody.innerHTML = html;
+            showDataContainer();
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            loadingIndicator.style.display = 'block';
+            dataContainer.style.display = 'none';
+            emptyState.style.display = 'none';
+        }
+
+        // 显示数据容器
+        function showDataContainer() {
+            loadingIndicator.style.display = 'none';
+            dataContainer.style.display = 'block';
+            emptyState.style.display = 'none';
+        }
+
+        // 显示空状态
+        function showEmptyState() {
+            loadingIndicator.style.display = 'none';
+            dataContainer.style.display = 'none';
+            emptyState.style.display = 'block';
+        }
+
+        // 显示错误
+        function showError(message) {
+            showEmptyState();
+            const emptyStateElement = document.getElementById('emptyState');
+            emptyStateElement.innerHTML = '<i class="fas fa-exclamation-triangle fa-3x mb-3 text-warning"></i><h5>加载失败</h5><p class="text-muted">' + escapeHtml(message) + '</p><button class="btn btn-primary" onclick="loadData()"><i class="fas fa-refresh"></i> 重试</button>';
+        }
+
+        // 更新分页
+        function updatePagination() {
+            const totalPages = Math.ceil(totalRecords / pageSize);
+            const startRecord = (currentPage - 1) * pageSize + 1;
+            const endRecord = Math.min(currentPage * pageSize, totalRecords);
+
+            // 更新信息
+            document.getElementById('paginationInfo').textContent = '显示第 ' + startRecord + '-' + endRecord + ' 条，共 ' + totalRecords + ' 条记录';
+
+            // 生成分页
+            const pagination = document.getElementById('pagination');
+            let paginationHtml = '';
+
+            // 上一页
+            const prevDisabled = currentPage === 1 ? 'disabled' : '';
+            paginationHtml += '<li class="page-item ' + prevDisabled + '"><a class="page-link" href="#" onclick="changePage(' + (currentPage - 1) + ')">上一页</a></li>';
+
+            // 页码
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+
+            for (let i = startPage; i <= endPage; i++) {
+                const active = i === currentPage ? 'active' : '';
+                paginationHtml += '<li class="page-item ' + active + '"><a class="page-link" href="#" onclick="changePage(' + i + ')">' + i + '</a></li>';
+            }
+
+            // 下一页
+            const nextDisabled = currentPage === totalPages ? 'disabled' : '';
+            paginationHtml += '<li class="page-item ' + nextDisabled + '"><a class="page-link" href="#" onclick="changePage(' + (currentPage + 1) + ')">下一页</a></li>';
+
+            pagination.innerHTML = paginationHtml;
+        }
+
+        // 切换页面
+        function changePage(page) {
+            if (page < 1 || page > Math.ceil(totalRecords / pageSize)) return;
+            currentPage = page;
+            loadData();
+        }
+
+        // 查看记录详情
+        async function viewRecord(id) {
+            try {
+                const response = await fetch(API_BASE_URL + '/data_cleaner/data/' + id);
+                const result = await response.json();
+                if (result.success) {
+                    showDetailModal(result.data, false);
+                } else {
+                    alert('获取详情失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 编辑记录
+        async function editRecord(id) {
+            try {
+                const response = await fetch(API_BASE_URL + '/data_cleaner/data/' + id);
+                const result = await response.json();
+                if (result.success) {
+                    showDetailModal(result.data, true);
+                } else {
+                    alert('获取详情失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 删除记录
+        async function deleteRecord(id) {
+            if (!confirm('确定要删除这条记录吗？删除后无法恢复。')) return;
+            try {
+                const response = await fetch(API_BASE_URL + '/data_cleaner/data/' + id, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    alert('删除成功');
+                    loadData();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                alert('网络请求失败: ' + error.message);
+            }
+        }
+
+        // 显示详情模态框
+        function showDetailModal(record, isEdit) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+
+            // 根据内容类型显示不同的原始内容
+            let originalContentHtml = '';
+            if (record.content_type === 'image' && record.image_data) {
+                originalContentHtml = '<div class="text-center"><h6 class="mb-3"><i class="fas fa-image text-success"></i> 原始图片</h6><img src="' + record.image_data + '" style="max-width: 100%; max-height: 300px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>';
+            } else {
+                originalContentHtml = '<div class="original-text">' + escapeHtml(record.original_text || '') + '</div>';
+            }
+
+            // 添加内容类型标识
+            const contentTypeLabel = record.content_type === 'image' ?
+                '<span class="badge bg-success me-2"><i class="fas fa-image"></i> 图片识别</span>' :
+                '<span class="badge bg-primary me-2"><i class="fas fa-font"></i> 文本处理</span>';
+
+            modal.innerHTML = '<div class="modal-content" onclick="event.stopPropagation()"><div class="modal-header"><h5>' + contentTypeLabel + (isEdit ? '编辑' : '查看') + '记录 #' + record.id + '</h5><button type="button" class="btn-close" onclick="closeModal()">×</button></div><div class="modal-body"><div class="detail-item"><div class="detail-label">' + (record.content_type === 'image' ? '原始图片' : '原文内容') + '</div>' + originalContentHtml + '</div><div class="detail-item"><div class="detail-label">清洗结果</div><div id="chunksContainer">' + renderChunks(record.cleaned_data?.chunks || [], isEdit) + '</div></div><div class="row"><div class="col-md-6"><div class="detail-item"><div class="detail-label">创建时间</div><div>' + formatDate(record.created_at) + '</div></div></div><div class="col-md-6"><div class="detail-item"><div class="detail-label">更新时间</div><div>' + formatDate(record.updated_at) + '</div></div></div></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal()">' + (isEdit ? '取消' : '关闭') + '</button>' + (isEdit ? '<button type="button" class="btn btn-primary" onclick="saveRecord(' + record.id + ')">保存修改</button>' : '') + '</div></div>';
+            modal.addEventListener('click', closeModal);
+            document.body.appendChild(modal);
+        }
+
+        // 渲染chunks - 优化编辑界面
+        function renderChunks(chunks, isEdit) {
+            return chunks.map((chunk, index) =>
+                '<div class="chunk-item border p-3 mb-3 rounded" style="background: #f8f9fa;"><div class="d-flex justify-content-between align-items-center mb-3"><h6 class="mb-0" style="color: #495057;">段落 ' + (index + 1) + '</h6>' + (isEdit ? '<span class="badge bg-warning text-dark">编辑模式</span>' : '<span class="badge bg-info">查看模式</span>') + '</div><div class="mb-3"><label class="form-label" style="font-weight: bold; color: #495057;">摘要</label>' + (isEdit ? '<textarea class="form-control chunk-summary" rows="2" placeholder="请输入段落摘要..." style="border: 2px solid #007bff;">' + escapeHtml(chunk.summary || '') + '</textarea>' : '<div class="form-control-plaintext p-2" style="background: white; border: 1px solid #dee2e6; border-radius: 5px;">' + escapeHtml(chunk.summary || '未设置') + '</div>') + '</div><div class="mb-3"><label class="form-label" style="font-weight: bold; color: #495057;">关键词' + (isEdit ? ' (用逗号分隔)' : '') + '</label>' + (isEdit ? '<input type="text" class="form-control chunk-keywords" placeholder="关键词1,关键词2,关键词3" style="border: 2px solid #007bff;" value="' + (chunk.keywords || []).join(',') + '">' : '<div class="form-control-plaintext p-2" style="background: white; border: 1px solid #dee2e6; border-radius: 5px;">' + ((chunk.keywords || []).length > 0 ? (chunk.keywords || []).map(kw => '<span class="keyword-tag">' + escapeHtml(kw) + '</span>').join('') : '<span class="text-muted">未设置关键词</span>') + '</div>') + '</div><div class="mb-3"><label class="form-label" style="font-weight: bold; color: #495057;">分类</label>' + (isEdit ? '<input type="text" class="form-control chunk-category" placeholder="内容分类" style="border: 2px solid #007bff;" value="' + escapeHtml(chunk.category || '') + '">' : '<div class="form-control-plaintext p-2" style="background: white; border: 1px solid #dee2e6; border-radius: 5px;">' + (chunk.category ? '<span class="category-badge">' + escapeHtml(chunk.category) + '</span>' : '<span class="text-muted">未设置分类</span>') + '</div>') + '</div><div class="mb-2"><label class="form-label" style="font-weight: bold; color: #495057;">搜索向量文本</label>' + (isEdit ? '<textarea class="form-control chunk-search-vector" rows="3" placeholder="优化后的搜索文本，包含原文关键信息和同义词" style="border: 2px solid #007bff;">' + escapeHtml(chunk.search_vector || '') + '</textarea>' : '<div class="form-control-plaintext p-2" style="background: white; border: 1px solid #dee2e6; border-radius: 5px; font-family: monospace; font-size: 0.9em; max-height: 100px; overflow-y: auto;">' + escapeHtml(chunk.search_vector || '未设置搜索向量') + '</div>') + '</div></div>'
+            ).join('');
+        }
+
+        // 保存记录 - 优化用户体验
+        async function saveRecord(id) {
+            // 显示保存中状态
+            const saveBtn = document.querySelector('.modal-footer .btn-primary');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>保存中...';
+            saveBtn.disabled = true;
+
+            try {
+                // 收集编辑后的数据
+                const chunks = [];
+                const chunkItems = document.querySelectorAll('.chunk-item');
+
+                if (chunkItems.length === 0) {
+                    throw new Error('没有找到可编辑的段落数据');
+                }
+
+                chunkItems.forEach((item, index) => {
+                    const summaryEl = item.querySelector('.chunk-summary');
+                    const keywordsEl = item.querySelector('.chunk-keywords');
+                    const categoryEl = item.querySelector('.chunk-category');
+                    const searchVectorEl = item.querySelector('.chunk-search-vector');
+
+                    if (!summaryEl || !keywordsEl || !categoryEl || !searchVectorEl) {
+                        console.warn('段落 ' + (index + 1) + ' 的某些字段缺失');
+                        return;
+                    }
+
+                    const summary = summaryEl.value.trim();
+                    const keywordsText = keywordsEl.value.trim();
+                    const category = categoryEl.value.trim();
+                    const searchVector = searchVectorEl.value.trim();
+
+                    // 处理关键词：按逗号分割并去除空格
+                    const keywords = keywordsText ? keywordsText.split(',').map(kw => kw.trim()).filter(kw => kw) : [];
+
+                    chunks.push({
+                        summary: summary,
+                        keywords: keywords,
+                        category: category,
+                        search_vector: searchVector
+                    });
+                });
+
+                if (chunks.length === 0) {
+                    throw new Error('没有有效的段落数据可保存');
+                }
+
+                const response = await fetch(API_BASE_URL + '/data_cleaner/data/' + id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cleaned_data: { chunks } })
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 成功提示
+                    const modal = document.querySelector('.modal-overlay');
+                    const modalHeader = modal.querySelector('.modal-header h5');
+                    modalHeader.innerHTML = '✅ 保存成功 - 记录 #' + id;
+                    modalHeader.style.color = '#28a745';
+
+                    // 延时关闭模态框
+                    setTimeout(() => {
+                        closeModal();
+                        loadData(); // 重新加载数据
+                    }, 1500);
+                } else {
+                    throw new Error(result.error || '保存失败，服务器返回错误');
+                }
+            } catch (error) {
+                console.error('保存记录时发生错误:', error);
+
+                // 显示错误信息
+                const modal = document.querySelector('.modal-overlay');
+                const modalHeader = modal.querySelector('.modal-header h5');
+                modalHeader.innerHTML = '❌ 保存失败 - 记录 #' + id;
+                modalHeader.style.color = '#dc3545';
+
+                // 显示详细错误
+                const modalBody = modal.querySelector('.modal-body');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger';
+                errorDiv.innerHTML = '<strong>保存失败！</strong><br>错误信息：' + error.message + '<br><small>请检查网络连接或稍后重试</small>';
+                modalBody.insertBefore(errorDiv, modalBody.firstChild);
+
+                // 恢复保存按钮
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            const modal = document.querySelector('.modal-overlay');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadData();
+        }
+
+        // 工具函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+    </script>
+</body>
+</html>`;

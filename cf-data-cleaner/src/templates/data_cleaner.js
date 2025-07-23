@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+// 数据清洗页面HTML模板
+export const dataCleanerHTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -215,10 +216,36 @@
                             <label for="textInput" class="form-label">请输入要清洗的文本内容：</label>
                             <textarea class="form-control" id="textInput" rows="8" placeholder="在这里粘贴或输入需要清洗的文本内容..."></textarea>
                         </div>
-                        <div class="upload-area" id="uploadArea">
+                        <!-- 内容类型选择 -->
+                        <div class="mb-3">
+                            <label class="form-label">处理类型：</label>
+                            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check" name="contentType" id="textMode" value="text" checked>
+                                <label class="btn btn-outline-primary" for="textMode">
+                                    <i class="fas fa-font"></i> 文本处理
+                                </label>
+                                <input type="radio" class="btn-check" name="contentType" id="imageMode" value="image">
+                                <label class="btn btn-outline-primary" for="imageMode">
+                                    <i class="fas fa-image"></i> 图片识别
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 文本上传区域 -->
+                        <div class="upload-area" id="textUploadArea">
                             <i class="fas fa-cloud-upload-alt fa-2x text-primary mb-2"></i>
                             <p>或者拖拽 .txt 文本文件到这里</p>
-                            <input type="file" id="fileInput" accept=".txt" style="display: none;">
+                            <input type="file" id="textFileInput" accept=".txt" style="display: none;">
+                        </div>
+
+                        <!-- 图片上传区域 -->
+                        <div class="upload-area" id="imageUploadArea" style="display: none;">
+                            <i class="fas fa-image fa-2x text-success mb-2"></i>
+                            <p>拖拽图片文件到这里或点击选择</p>
+                            <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
+                            <div id="imagePreview" class="mt-3" style="display: none;">
+                                <img id="previewImg" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+                            </div>
                         </div>
                         <div class="d-flex justify-content-end mt-3">
                             <button class="btn btn-primary btn-action" id="cleanBtn" disabled>
@@ -227,7 +254,7 @@
                             <button class="btn btn-success btn-action" id="saveBtn" disabled>
                                 <i class="fas fa-database"></i> 保存到数据库
                             </button>
-                            <a href="data_viewer.html" class="btn btn-info btn-action">
+                            <a href="/data_viewer/" class="btn btn-info btn-action">
                                 <i class="fas fa-eye"></i> 查看数据
                             </a>
                         </div>
@@ -300,16 +327,24 @@
     <script>
         // 全局变量
         let originalText = '';
+        let originalImage = null;
         let cleanedData = null;
         let defaultPrompt = '';
+        let currentMode = 'text'; // 'text' or 'image'
 
-        // API 基础URL - 修改为您的CF Workers URL
-        const API_BASE_URL = 'https://cf-data-cleaner.coder-zlen.workers.dev';
+        // API 基础URL - 自动使用当前域名
+        const API_BASE_URL = window.location.origin;
 
         // DOM 元素
         const textInput = document.getElementById('textInput');
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
+        const textUploadArea = document.getElementById('textUploadArea');
+        const imageUploadArea = document.getElementById('imageUploadArea');
+        const textFileInput = document.getElementById('textFileInput');
+        const imageFileInput = document.getElementById('imageFileInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        const textModeBtn = document.getElementById('textMode');
+        const imageModeBtn = document.getElementById('imageMode');
         const originalContent = document.getElementById('originalContent');
         const cleanedContent = document.getElementById('cleanedContent');
         const cleanBtn = document.getElementById('cleanBtn');
@@ -327,23 +362,42 @@
 
         // 设置事件监听器
         function setupEventListeners() {
+            // 模式切换监听
+            textModeBtn.addEventListener('change', function() {
+                if (this.checked) {
+                    switchMode('text');
+                }
+            });
+            imageModeBtn.addEventListener('change', function() {
+                if (this.checked) {
+                    switchMode('image');
+                }
+            });
+
             // 文本输入监听
             textInput.addEventListener('input', function() {
                 const text = this.value.trim();
                 if (text) {
                     displayOriginalText(text);
-                    cleanBtn.disabled = false;
+                    updateCleanButtonState();
                 } else {
-                    cleanBtn.disabled = true;
+                    updateCleanButtonState();
                 }
             });
 
-            // 文件上传相关事件
-            uploadArea.addEventListener('click', () => fileInput.click());
-            uploadArea.addEventListener('dragover', handleDragOver);
-            uploadArea.addEventListener('drop', handleDrop);
-            uploadArea.addEventListener('dragleave', handleDragLeave);
-            fileInput.addEventListener('change', handleFileSelect);
+            // 文本文件上传相关事件
+            textUploadArea.addEventListener('click', () => textFileInput.click());
+            textUploadArea.addEventListener('dragover', handleDragOver);
+            textUploadArea.addEventListener('drop', handleDrop);
+            textUploadArea.addEventListener('dragleave', handleDragLeave);
+            textFileInput.addEventListener('change', handleTextFileSelect);
+
+            // 图片文件上传相关事件
+            imageUploadArea.addEventListener('click', () => imageFileInput.click());
+            imageUploadArea.addEventListener('dragover', handleDragOver);
+            imageUploadArea.addEventListener('drop', handleImageDrop);
+            imageUploadArea.addEventListener('dragleave', handleDragLeave);
+            imageFileInput.addEventListener('change', handleImageFileSelect);
 
             // 按钮事件
             cleanBtn.addEventListener('click', performDataCleaning);
@@ -351,35 +405,85 @@
             resetPromptBtn.addEventListener('click', resetPrompt);
         }
 
+        // 模式切换
+        function switchMode(mode) {
+            currentMode = mode;
+            if (mode === 'text') {
+                textUploadArea.style.display = 'block';
+                imageUploadArea.style.display = 'none';
+                textInput.parentElement.style.display = 'block';
+            } else {
+                textUploadArea.style.display = 'none';
+                imageUploadArea.style.display = 'block';
+                textInput.parentElement.style.display = 'none';
+            }
+
+            // 重置状态
+            originalText = '';
+            originalImage = null;
+            cleanedData = null;
+            originalContent.innerHTML = '<p class="text-muted text-center">这里是原文区域</p>';
+            cleanedContent.innerHTML = '<p class="text-muted text-center"><i class="fas fa-sparkles"></i> 这里是清洗后的数据展示结果<br><small>数据清洗完成后，点击每个段落的<strong>编辑</strong>按钮可修改所有字段</small></p>';
+            updateCleanButtonState();
+            saveBtn.disabled = true;
+
+            showStatus(mode === 'text' ? '切换到文本处理模式' : '切换到图片识别模式', 'success');
+        }
+
+        // 更新清洗按钮状态
+        function updateCleanButtonState() {
+            if (currentMode === 'text') {
+                cleanBtn.disabled = !textInput.value.trim();
+            } else {
+                cleanBtn.disabled = !originalImage;
+            }
+        }
+
         // 拖拽上传事件处理
         function handleDragOver(e) {
             e.preventDefault();
-            uploadArea.style.backgroundColor = '#e9ecef';
+            e.currentTarget.style.backgroundColor = '#e9ecef';
         }
 
         function handleDragLeave(e) {
             e.preventDefault();
-            uploadArea.style.backgroundColor = '#f8f9fa';
+            e.currentTarget.style.backgroundColor = '#f8f9fa';
         }
 
         function handleDrop(e) {
             e.preventDefault();
-            uploadArea.style.backgroundColor = '#f8f9fa';
+            e.currentTarget.style.backgroundColor = '#f8f9fa';
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                processFile(files[0]);
+                processTextFile(files[0]);
             }
         }
 
-        function handleFileSelect(e) {
+        function handleImageDrop(e) {
+            e.preventDefault();
+            e.currentTarget.style.backgroundColor = '#f8f9fa';
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processImageFile(files[0]);
+            }
+        }
+
+        function handleTextFileSelect(e) {
             const files = e.target.files;
             if (files.length > 0) {
-                processFile(files[0]);
+                processTextFile(files[0]);
             }
         }
 
-        // 处理文件
-        async function processFile(file) {
+        function handleImageFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                processImageFile(files[0]);
+            }
+        }
+
+        // 处理文本文件
+        async function processTextFile(file) {
             if (!file.name.endsWith('.txt')) {
                 showStatus('只支持 .txt 文本文件', 'error');
                 return;
@@ -389,11 +493,45 @@
                 const text = await readTextFile(file);
                 textInput.value = text;
                 displayOriginalText(text);
-                cleanBtn.disabled = false;
-                showStatus('文件读取成功', 'success');
+                updateCleanButtonState();
+                showStatus('文本文件读取成功', 'success');
             } catch (error) {
                 showStatus('文件读取失败: ' + error.message, 'error');
             }
+        }
+
+        // 处理图片文件
+        async function processImageFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showStatus('只支持图片文件', 'error');
+                return;
+            }
+
+            // 检查文件大小 (限制为10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                showStatus('图片文件过大，请选择小于10MB的图片', 'error');
+                return;
+            }
+
+            try {
+                const imageDataUrl = await readImageFile(file);
+                originalImage = imageDataUrl;
+                displayOriginalImage(imageDataUrl, file.name);
+                updateCleanButtonState();
+                showStatus('图片加载成功', 'success');
+            } catch (error) {
+                showStatus('图片读取失败: ' + error.message, 'error');
+            }
+        }
+
+        // 读取图片文件为Base64
+        function readImageFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
         }
 
         // 读取文本文件
@@ -409,13 +547,26 @@
         // 显示原始文本
         function displayOriginalText(text) {
             originalText = text;
-            originalContent.innerHTML = `<pre style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(text)}</pre>`;
+            originalContent.innerHTML = '<pre style="white-space: pre-wrap; font-family: inherit;">' + escapeHtml(text) + '</pre>';
+        }
+
+        // 显示原始图片
+        function displayOriginalImage(imageDataUrl, fileName) {
+            originalContent.innerHTML =
+                '<div class="text-center">' +
+                '<h6 class="mb-3"><i class="fas fa-image"></i> ' + escapeHtml(fileName) + '</h6>' +
+                '<img src="' + imageDataUrl + '" style="max-width: 100%; max-height: 350px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">' +
+                '</div>';
+
+            // 同时在上传区域显示预览
+            previewImg.src = imageDataUrl;
+            imagePreview.style.display = 'block';
         }
 
         // 加载默认提示词
         async function loadDefaultPrompt() {
             try {
-                const response = await fetch(`${API_BASE_URL}/data_cleaner/get_default_prompt`);
+                const response = await fetch(API_BASE_URL + '/data_cleaner/get_default_prompt');
                 const data = await response.json();
                 if (data.success) {
                     defaultPrompt = data.prompt;
@@ -428,12 +579,6 @@
 
         // 执行数据清洗
         async function performDataCleaning() {
-            const text = textInput.value.trim();
-            if (!text) {
-                showStatus('请输入文本内容', 'error');
-                return;
-            }
-
             const prompt = systemPrompt.value.trim();
             if (!prompt) {
                 showStatus('请配置System Prompt', 'error');
@@ -444,31 +589,57 @@
             cleanBtn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE_URL}/data_cleaner/clean_data`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
+                let response, requestData;
+
+                if (currentMode === 'text') {
+                    const text = textInput.value.trim();
+                    if (!text) {
+                        showStatus('请输入文本内容', 'error');
+                        return;
+                    }
+
+                    requestData = {
                         text: text,
-                        system_prompt: prompt
-                    })
-                });
+                        system_prompt: prompt,
+                        content_type: 'text'
+                    };
+                    response = await fetch(API_BASE_URL + '/data_cleaner/clean_data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData)
+                    });
+                } else {
+                    if (!originalImage) {
+                        showStatus('请选择图片文件', 'error');
+                        return;
+                    }
+
+                    requestData = {
+                        image: originalImage,
+                        system_prompt: prompt,
+                        content_type: 'image'
+                    };
+                    response = await fetch(API_BASE_URL + '/data_cleaner/clean_image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestData)
+                    });
+                }
 
                 const result = await response.json();
                 if (result.success) {
                     cleanedData = result.cleaned_data;
                     displayCleanedData(cleanedData);
                     saveBtn.disabled = false;
-                    showStatus('数据清洗完成', 'success');
+                    showStatus(currentMode === 'text' ? '文本清洗完成' : '图片识别完成', 'success');
                 } else {
-                    showStatus('数据清洗失败: ' + result.error, 'error');
+                    showStatus('处理失败: ' + result.error, 'error');
                 }
             } catch (error) {
                 showStatus('请求失败: ' + error.message, 'error');
             } finally {
                 showLoading(false);
-                cleanBtn.disabled = false;
+                updateCleanButtonState();
             }
         }
 
@@ -481,22 +652,21 @@
 
             let html = '';
             data.chunks.forEach((chunk, index) => {
-                html += `
-                    <div class="chunk-item" data-index="${index}">
-                        <div class="chunk-header">
-                            <span>段落 ${index + 1}</span>
-                            <button class="btn btn-sm btn-outline-primary edit-chunk-btn" data-index="${index}">
-                                <i class="fas fa-edit"></i> 编辑
-                            </button>
-                        </div>
-                        <div class="chunk-summary">${escapeHtml(chunk.summary || '')}</div>
-                        <div class="chunk-keywords">
-                            ${(chunk.keywords || []).map(kw => `<span class="keyword-tag">${escapeHtml(kw)}</span>`).join('')}
-                        </div>
-                        <div class="chunk-category">${escapeHtml(chunk.category || '')}</div>
-                        <div class="chunk-search-vector">${escapeHtml(chunk.search_vector || '')}</div>
-                    </div>
-                `;
+                html += '<div class="chunk-item" data-index="' + index + '">';
+                html += '<div class="chunk-header">';
+                html += '<span>段落 ' + (index + 1) + '</span>';
+                html += '<button class="btn btn-sm btn-outline-primary edit-chunk-btn" data-index="' + index + '">';
+                html += '<i class="fas fa-edit"></i> 编辑</button>';
+                html += '</div>';
+                html += '<div class="chunk-summary">' + escapeHtml(chunk.summary || '') + '</div>';
+                html += '<div class="chunk-keywords">';
+                (chunk.keywords || []).forEach(kw => {
+                    html += '<span class="keyword-tag">' + escapeHtml(kw) + '</span>';
+                });
+                html += '</div>';
+                html += '<div class="chunk-category">' + escapeHtml(chunk.category || '') + '</div>';
+                html += '<div class="chunk-search-vector">' + escapeHtml(chunk.search_vector || '') + '</div>';
+                html += '</div>';
             });
 
             cleanedContent.innerHTML = html;
@@ -507,7 +677,7 @@
             });
         }
 
-                // 编辑段落 (完整版本)
+        // 编辑段落 (完整版本)
         function editChunk(e) {
             const index = parseInt(e.target.closest('.edit-chunk-btn').dataset.index);
             const chunk = cleanedData.chunks[index];
@@ -520,38 +690,7 @@
         function showEditModal(index, chunk) {
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
-            modal.innerHTML = `
-                <div class="modal-content" onclick="event.stopPropagation()">
-                    <div class="modal-header">
-                        <h5>编辑段落 ${index + 1}</h5>
-                        <button type="button" class="btn-close" onclick="closeEditModal()">×</button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">摘要</label>
-                            <textarea class="form-control" id="edit-summary" rows="2" placeholder="段落摘要">${escapeHtml(chunk.summary || '')}</textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">关键词（用逗号分隔）</label>
-                            <input type="text" class="form-control" id="edit-keywords" placeholder="关键词1,关键词2,关键词3"
-                                   value="${(chunk.keywords || []).join(',')}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">分类</label>
-                            <input type="text" class="form-control" id="edit-category" placeholder="内容分类"
-                                   value="${escapeHtml(chunk.category || '')}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">搜索向量文本</label>
-                            <textarea class="form-control" id="edit-search-vector" rows="3" placeholder="优化后的搜索文本">${escapeHtml(chunk.search_vector || '')}</textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button>
-                        <button type="button" class="btn btn-primary" onclick="saveChunkEdit(${index})">保存修改</button>
-                    </div>
-                </div>
-            `;
+            modal.innerHTML = '<div class="modal-content" onclick="event.stopPropagation()"><div class="modal-header"><h5>编辑段落 ' + (index + 1) + '</h5><button type="button" class="btn-close" onclick="closeEditModal()">×</button></div><div class="modal-body"><div class="mb-3"><label class="form-label">摘要</label><textarea class="form-control" id="edit-summary" rows="2" placeholder="段落摘要">' + escapeHtml(chunk.summary || '') + '</textarea></div><div class="mb-3"><label class="form-label">关键词（用逗号分隔）</label><input type="text" class="form-control" id="edit-keywords" placeholder="关键词1,关键词2,关键词3" value="' + (chunk.keywords || []).join(',') + '"></div><div class="mb-3"><label class="form-label">分类</label><input type="text" class="form-control" id="edit-category" placeholder="内容分类" value="' + escapeHtml(chunk.category || '') + '"></div><div class="mb-3"><label class="form-label">搜索向量文本</label><textarea class="form-control" id="edit-search-vector" rows="3" placeholder="优化后的搜索文本">' + escapeHtml(chunk.search_vector || '') + '</textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeEditModal()">取消</button><button type="button" class="btn btn-primary" onclick="saveChunkEdit(' + index + ')">保存修改</button></div></div>';
 
             // 点击背景关闭模态框
             modal.addEventListener('click', closeEditModal);
@@ -605,15 +744,6 @@
         function closeEditModal() {
             const modal = document.querySelector('.modal-overlay');
             if (modal) {
-                // 移除事件监听器
-                const handleEscape = (e) => {
-                    if (e.key === 'Escape') {
-                        closeEditModal();
-                        document.removeEventListener('keydown', handleEscape);
-                    }
-                };
-                document.removeEventListener('keydown', handleEscape);
-
                 modal.remove();
             }
         }
@@ -629,20 +759,28 @@
             saveBtn.disabled = true;
 
             try {
-                const response = await fetch(`${API_BASE_URL}/data_cleaner/save_data`, {
+                const requestData = {
+                    cleaned_data: cleanedData,
+                    content_type: currentMode
+                };
+
+                // 根据当前模式添加对应的原始数据
+                if (currentMode === 'text') {
+                    requestData.original_text = originalText;
+                } else {
+                    requestData.original_text = '[图片内容]'; // 简化存储，主要存储识别结果
+                    requestData.original_image = originalImage;
+                }
+
+                const response = await fetch(API_BASE_URL + '/data_cleaner/save_data', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        original_text: originalText,
-                        cleaned_data: cleanedData
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
                 });
 
                 const result = await response.json();
                 if (result.success) {
-                    showStatus(`数据保存成功，记录ID: ${result.record_id}`, 'success');
+                    showStatus('数据保存成功，记录ID: ' + result.record_id, 'success');
                 } else {
                     showStatus('数据保存失败: ' + result.error, 'error');
                 }
@@ -669,9 +807,8 @@
 
         function showStatus(message, type) {
             statusMessage.textContent = message;
-            statusMessage.className = `status-message status-${type}`;
+            statusMessage.className = 'status-message status-' + type;
             statusMessage.style.display = 'block';
-
             if (type === 'success') {
                 setTimeout(() => hideStatus(), 3000);
             }
@@ -686,4 +823,4 @@
         }
     </script>
 </body>
-</html>
+</html>`;
