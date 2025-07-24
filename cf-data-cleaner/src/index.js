@@ -17,7 +17,35 @@ class DataCleanerService {
     this.env = env
   }
 
-  getDefaultPrompt() {
+  getDefaultPrompt(language = 'zh') {
+    if (language === 'en') {
+      return `You are a professional data cleaning and structuring expert, specialized in cleaning and converting raw text data into structured RAG knowledge base format.
+
+## Task Objective
+Intelligently segment and clean input raw text by semantic paragraphs, generating high-quality structured data for RAG retrieval systems.
+
+## Processing Requirements
+1. **Semantic Segmentation**: Segment text into independent paragraph blocks based on content logic and semantic completeness
+2. **Content Cleaning**: Remove meaningless characters, fix formatting issues, standardize punctuation
+3. **Information Extraction**: Generate summary, keywords, categories, and search vector text for each paragraph
+
+## Output Format
+Must strictly return in the following JSON format without any other text explanations:
+
+{
+  "chunks": [
+    {
+      "summary": "Core content summary of this paragraph, 10-50 words",
+      "keywords": ["keyword1", "keyword2", "keyword3"],
+      "category": "Content category (e.g., Technical Concept, Operational Steps, Theoretical Knowledge, etc.)",
+      "search_vector": "Optimized search text containing key information and synonyms from original text"
+    }
+  ]
+}
+
+Please strictly follow the above requirements to process input text, ensuring correct JSON format and high content quality.`;
+    }
+
     return `你是一个专业的数据清洗和结构化专家，专门负责将原始文本数据清洗并转换为结构化的RAG知识库格式。
 
 ## 任务目标
@@ -42,7 +70,39 @@ class DataCleanerService {
   ]
 }
 
-请严格按照上述要求处理输入文本，确保输出的JSON格式正确且内容质量高。`
+请严格按照上述要求处理输入文本，确保输出的JSON格式正确且内容质量高。`;
+  }
+
+  getDefaultChatPrompt(language = 'en') {
+    if (language === 'en') {
+      return `You are a professional knowledge assistant specialized in answering user questions based on the provided knowledge base content.
+
+Response Requirements:
+1. Answer primarily based on the provided knowledge base content
+2. If no relevant information is found in the knowledge base, clearly state this and provide general suggestions
+3. Answers should be accurate, detailed, and well-organized
+4. Appropriately quote specific content from the knowledge base
+5. Maintain a friendly and professional tone
+
+Knowledge Base Content:
+{KNOWLEDGE_CONTEXT}
+
+User Question: {USER_QUESTION}`;
+    }
+
+    return `你是一个专业的知识助手，专门基于提供的知识库内容回答用户问题。
+
+回答要求：
+1. 主要基于提供的知识库内容进行回答
+2. 如果知识库中没有相关信息，请明确说明并提供一般性建议
+3. 回答要准确、详细且有条理
+4. 可以适当引用知识库中的具体内容
+5. 保持友好和专业的语调
+
+知识库内容：
+{KNOWLEDGE_CONTEXT}
+
+用户问题：{USER_QUESTION}`;
   }
 
   async cleanData(text, systemPrompt) {
@@ -456,7 +516,22 @@ class DataCleanerService {
 
   // RAG对话相关方法
 
-  // 简单的中文分词函数
+    // 多语言分词函数
+  tokenizeText(text, language = 'auto') {
+    // 自动检测语言（简单的启发式方法）
+    if (language === 'auto') {
+      const chineseRatio = (text.match(/[\u4e00-\u9fa5]/g) || []).length / text.length;
+      language = chineseRatio > 0.3 ? 'zh' : 'en';
+    }
+
+    if (language === 'en') {
+      return this.tokenizeEnglishText(text);
+    } else {
+      return this.tokenizeChineseText(text);
+    }
+  }
+
+  // 中文分词函数
   tokenizeChineseText(text) {
     // 移除标点符号并分割
     const cleanText = text.replace(/[，。！？；：""''（）【】《》\s\n\r\t]/g, ' ');
@@ -486,10 +561,52 @@ class DataCleanerService {
     );
   }
 
-  // 计算文本相似度（简单的词汇重叠度）
-  calculateSimilarity(query, text) {
-    const queryWords = this.tokenizeChineseText(query.toLowerCase());
-    const textWords = this.tokenizeChineseText(text.toLowerCase());
+  // 英文分词函数
+  tokenizeEnglishText(text) {
+    // 移除标点符号并转为小写
+    const cleanText = text.toLowerCase().replace(/[^\w\s]/g, ' ');
+
+    // 基于空格分词
+    let words = cleanText.split(/\s+/).filter(word => word.length > 0);
+
+    // 过滤停用词（简单版本）
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+      'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+      'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must', 'shall',
+      'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+      'this', 'that', 'these', 'those', 'here', 'there', 'where', 'when', 'how', 'why', 'what'
+    ]);
+
+    // 过滤停用词和短词
+    words = words.filter(word => !stopWords.has(word) && word.length >= 2);
+
+    // 生成2-3词的短语
+    const phrases = [];
+    for (let i = 0; i < words.length - 1; i++) {
+      // 2词短语
+      if (i + 1 < words.length) {
+        phrases.push(words[i] + ' ' + words[i + 1]);
+      }
+      // 3词短语
+      if (i + 2 < words.length) {
+        phrases.push(words[i] + ' ' + words[i + 1] + ' ' + words[i + 2]);
+      }
+    }
+
+    // 合并单词和短语
+    const allWords = [...words, ...phrases];
+
+    // 去重并过滤
+    return [...new Set(allWords)].filter(word =>
+      word.length >= 2 && /[a-zA-Z]/.test(word)
+    );
+  }
+
+    // 计算文本相似度（简单的词汇重叠度）
+  calculateSimilarity(query, text, language = 'auto') {
+    const queryWords = this.tokenizeText(query.toLowerCase(), language);
+    const textWords = this.tokenizeText(text.toLowerCase(), language);
 
     let matches = 0;
     let totalWords = queryWords.length;
@@ -503,8 +620,8 @@ class DataCleanerService {
     return totalWords > 0 ? matches / totalWords : 0;
   }
 
-  // RAG检索函数
-  async ragSearch(question, limit = 5) {
+    // RAG检索函数
+  async ragSearch(question, limit = 5, language = 'auto') {
     if (!this.env.SUPABASE_URL || !this.env.SUPABASE_SERVICE_KEY) {
       return {
         success: false,
@@ -516,10 +633,14 @@ class DataCleanerService {
 
     try {
       // 对问题进行分词
-      const keywords = this.tokenizeChineseText(question);
+      const keywords = this.tokenizeText(question, language);
+      console.log('🔍 RAG检索调试信息:');
+      console.log('问题:', question);
+      console.log('检测语言:', language);
+      console.log('分词结果:', keywords);
 
       // 构建搜索查询 - 先尝试关键词匹配
-      let queryParams = 'select=*&order=created_at.desc&limit=50'; // 先获取较多数据用于排序
+      let queryParams = 'select=*&order=created_at.desc&limit=200'; // 先获取较多数据用于排序
 
       const response = await fetch(
         `${this.env.SUPABASE_URL}/rest/v1/cleaned_data?${queryParams}`,
@@ -547,25 +668,25 @@ class DataCleanerService {
           // 计算多个字段的相关性得分
           let score = 0;
 
-          // 搜索向量文本匹配（权重最高）
+                    // 搜索向量文本匹配（权重最高）
           if (chunk.search_vector) {
-            score += this.calculateSimilarity(question, chunk.search_vector) * 3;
+            score += this.calculateSimilarity(question, chunk.search_vector, language) * 3;
           }
 
           // 关键词匹配
           if (chunk.keywords && Array.isArray(chunk.keywords)) {
             const keywordText = chunk.keywords.join(' ');
-            score += this.calculateSimilarity(question, keywordText) * 2;
+            score += this.calculateSimilarity(question, keywordText, language) * 2;
           }
 
           // 摘要匹配
           if (chunk.summary) {
-            score += this.calculateSimilarity(question, chunk.summary) * 1.5;
+            score += this.calculateSimilarity(question, chunk.summary, language) * 1.5;
           }
 
           // 原文匹配（权重较低）
           if (record.original_text) {
-            score += this.calculateSimilarity(question, record.original_text) * 0.5;
+            score += this.calculateSimilarity(question, record.original_text, language) * 0.5;
           }
 
           // 只保留有一定相关性的结果
@@ -607,13 +728,19 @@ class DataCleanerService {
     }
   }
 
-  // RAG对话方法
-  async ragChat(question, systemPrompt, searchLimit = 5) {
+    // RAG对话方法
+  async ragChat(question, systemPrompt, searchLimit = 5, language = 'auto') {
     const startTime = Date.now();
+
+    // 检测语言（如果是auto）
+    if (language === 'auto') {
+      const chineseRatio = (question.match(/[\u4e00-\u9fa5]/g) || []).length / question.length;
+      language = chineseRatio > 0.3 ? 'zh' : 'en';
+    }
 
     try {
       // 1. 执行RAG检索
-      const searchResult = await this.ragSearch(question, searchLimit);
+      const searchResult = await this.ragSearch(question, searchLimit, language);
 
       if (!searchResult.success) {
         return {
@@ -628,16 +755,29 @@ class DataCleanerService {
       // 2. 构建知识库上下文
       let knowledgeContext = '';
       if (searchResult.results.length > 0) {
-        knowledgeContext = searchResult.results.map((result, index) => {
-          return `知识片段${index + 1}：
+        if (language === 'zh') {
+          knowledgeContext = searchResult.results.map((result, index) => {
+            return `知识片段${index + 1}：
 分类：${result.category}
 摘要：${result.summary}
 内容：${result.content}
 关键词：${result.keywords.join(', ')}
 `;
-        }).join('\n---\n');
+          }).join('\n---\n');
+        } else {
+          knowledgeContext = searchResult.results.map((result, index) => {
+            return `Knowledge Fragment ${index + 1}:
+Category: ${result.category}
+Summary: ${result.summary}
+Content: ${result.content}
+Keywords: ${result.keywords.join(', ')}
+`;
+          }).join('\n---\n');
+        }
       } else {
-        knowledgeContext = '未找到相关的知识库内容。';
+                knowledgeContext = language === 'zh' ?
+          '未找到相关的知识库内容。' :
+          'No relevant content found in the knowledge base.';
       }
 
       // 3. 替换系统提示词中的占位符
@@ -806,12 +946,22 @@ app.get('/data_viewer/', (c) => {
 
 // 获取默认提示词
 app.get('/data_cleaner/get_default_prompt', async (c) => {
+  const language = c.req.query('language') || 'en'
+  const type = c.req.query('type') || 'cleaning' // 'cleaning' 或 'chat'
   const service = new DataCleanerService(c.env)
-  const prompt = service.getDefaultPrompt()
+
+  let prompt;
+  if (type === 'chat') {
+    prompt = service.getDefaultChatPrompt(language)
+  } else {
+    prompt = service.getDefaultPrompt(language)
+  }
 
   return c.json({
     success: true,
-    prompt: prompt
+    prompt: prompt,
+    language: language,
+    type: type
   })
 })
 
@@ -967,35 +1117,24 @@ app.delete('/data_cleaner/data/:id', async (c) => {
 // RAG对话API
 app.post('/chat/ask', async (c) => {
   try {
-    const { question, system_prompt } = await c.req.json()
+    const { question, system_prompt, language } = await c.req.json()
 
     if (!question?.trim()) {
       return c.json({
         success: false,
-        error: "问题不能为空"
+        error: language === 'zh' ? "问题不能为空" : "Question cannot be empty"
       }, 400)
     }
 
     const service = new DataCleanerService(c.env)
 
+    // 检测语言（如果没有提供）
+    const detectedLanguage = language || 'auto'
+
     // 使用默认系统提示词（如果没有提供）
-    const defaultSystemPrompt = `你是一个专业的知识助手，专门基于提供的知识库内容回答用户问题。
+    const finalSystemPrompt = system_prompt?.trim() || service.getDefaultChatPrompt(detectedLanguage);
 
-回答要求：
-1. 主要基于提供的知识库内容进行回答
-2. 如果知识库中没有相关信息，请明确说明并提供一般性建议
-3. 回答要准确、详细且有条理
-4. 可以适当引用知识库中的具体内容
-5. 保持友好和专业的语调
-
-知识库内容：
-{KNOWLEDGE_CONTEXT}
-
-用户问题：{USER_QUESTION}`;
-
-    const finalSystemPrompt = system_prompt?.trim() || defaultSystemPrompt;
-
-    const result = await service.ragChat(question, finalSystemPrompt, 5);
+    const result = await service.ragChat(question, finalSystemPrompt, 5, detectedLanguage);
 
     return c.json(result)
   } catch (error) {

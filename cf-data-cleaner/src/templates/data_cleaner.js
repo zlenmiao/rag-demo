@@ -307,15 +307,21 @@ export const dataCleanerHTML = `<!DOCTYPE html>
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5><i class="fas fa-cog"></i> System Prompt 配置</h5>
-                        <button class="btn btn-sm btn-outline-primary" id="resetPromptBtn">
-                            <i class="fas fa-undo"></i> 重置默认
-                        </button>
+                        <div>
+                            <select class="form-select form-select-sm d-inline-block me-2" style="width: auto;" id="dataCleanerLanguage">
+                                <option value="zh">🇨🇳 中文</option>
+                                <option value="en" selected>🇺🇸 English</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-primary" id="resetPromptBtn">
+                                <i class="fas fa-undo"></i> <span id="resetPromptText">重置默认</span>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <textarea class="form-control prompt-area" id="systemPrompt" placeholder="在这里编辑数据清洗的System Prompt...">正在加载默认提示词...</textarea>
                         <small class="form-text text-muted mt-2">
                             <i class="fas fa-info-circle"></i>
-                            修改此提示词可以调整AI的数据清洗策略和输出格式
+                            <span id="promptHintText">修改此提示词可以调整AI的数据清洗策略和输出格式</span>
                         </small>
                     </div>
                 </div>
@@ -331,6 +337,7 @@ export const dataCleanerHTML = `<!DOCTYPE html>
         let cleanedData = null;
         let defaultPrompt = '';
         let currentMode = 'text'; // 'text' or 'image'
+        let currentLanguage = 'en';
 
         // API 基础URL - 自动使用当前域名
         const API_BASE_URL = window.location.origin;
@@ -351,14 +358,36 @@ export const dataCleanerHTML = `<!DOCTYPE html>
         const saveBtn = document.getElementById('saveBtn');
         const systemPrompt = document.getElementById('systemPrompt');
         const resetPromptBtn = document.getElementById('resetPromptBtn');
+        const dataCleanerLanguage = document.getElementById('dataCleanerLanguage');
+        const resetPromptText = document.getElementById('resetPromptText');
+        const promptHintText = document.getElementById('promptHintText');
         const statusMessage = document.getElementById('statusMessage');
         const loadingIndicator = document.getElementById('loadingIndicator');
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
             loadDefaultPrompt();
+            updateUILanguage();
             setupEventListeners();
         });
+
+        // 语言切换事件
+        function onLanguageChange() {
+            currentLanguage = dataCleanerLanguage.value;
+            updateUILanguage();
+            loadDefaultPrompt();
+        }
+
+        // 更新界面语言
+        function updateUILanguage() {
+            if (currentLanguage === 'zh') {
+                resetPromptText.textContent = '重置默认';
+                promptHintText.textContent = '修改此提示词可以调整AI的数据清洗策略和输出格式';
+            } else {
+                resetPromptText.textContent = 'Reset Default';
+                promptHintText.textContent = 'Modify this prompt to adjust AI data cleaning strategy and output format';
+            }
+        }
 
         // 设置事件监听器
         function setupEventListeners() {
@@ -403,6 +432,7 @@ export const dataCleanerHTML = `<!DOCTYPE html>
             cleanBtn.addEventListener('click', performDataCleaning);
             saveBtn.addEventListener('click', saveToDatabase);
             resetPromptBtn.addEventListener('click', resetPrompt);
+            dataCleanerLanguage.addEventListener('change', onLanguageChange);
         }
 
         // 模式切换
@@ -566,7 +596,7 @@ export const dataCleanerHTML = `<!DOCTYPE html>
         // 加载默认提示词
         async function loadDefaultPrompt() {
             try {
-                const response = await fetch(API_BASE_URL + '/data_cleaner/get_default_prompt');
+                const response = await fetch(API_BASE_URL + '/data_cleaner/get_default_prompt?language=' + currentLanguage);
                 const data = await response.json();
                 if (data.success) {
                     defaultPrompt = data.prompt;
@@ -792,10 +822,13 @@ export const dataCleanerHTML = `<!DOCTYPE html>
             }
         }
 
-        // 重置提示词
+                // 重置提示词
         function resetPrompt() {
-            systemPrompt.value = defaultPrompt;
-            showStatus('已重置为默认提示词', 'success');
+            loadDefaultPrompt();
+            const message = currentLanguage === 'zh' ?
+                '已重置为默认提示词' :
+                'Reset to default prompt';
+            showStatus(message, 'success');
         }
 
         // 工具函数

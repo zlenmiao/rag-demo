@@ -267,24 +267,39 @@ export const chatHTML = `<!DOCTYPE html>
                 <!-- 设置面板 -->
                 <div class="collapse mt-3" id="settingsPanel">
                     <div class="settings-panel">
-                        <h6><i class="fas fa-robot"></i> 系统提示词设置</h6>
-                        <textarea class="form-control" id="systemPrompt" rows="4" placeholder="设置AI助手的行为和回答风格...">你是一个专业的知识助手，专门基于提供的知识库内容回答用户问题。
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-globe"></i> 语言设置</h6>
+                                <select class="form-select mb-3" id="languageSelect">
+                                    <option value="auto">🌐 自动检测</option>
+                                    <option value="zh">🇨🇳 中文</option>
+                                    <option value="en" selected>🇺🇸 English</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-robot"></i> 系统提示词</h6>
+                                <button class="btn btn-outline-secondary btn-sm" id="loadDefaultPrompt">
+                                    <i class="fas fa-sync"></i> 加载默认
+                                </button>
+                            </div>
+                        </div>
+                        <textarea class="form-control" id="systemPrompt" rows="4" placeholder="Set AI assistant behavior and response style...">You are a professional knowledge assistant specialized in answering user questions based on the provided knowledge base content.
 
-回答要求：
-1. 主要基于提供的知识库内容进行回答
-2. 如果知识库中没有相关信息，请明确说明并提供一般性建议
-3. 回答要准确、详细且有条理
-4. 可以适当引用知识库中的具体内容
-5. 保持友好和专业的语调
+Response Requirements:
+1. Answer primarily based on the provided knowledge base content
+2. If no relevant information is found in the knowledge base, clearly state this and provide general suggestions
+3. Answers should be accurate, detailed, and well-organized
+4. Appropriately quote specific content from the knowledge base
+5. Maintain a friendly and professional tone
 
-知识库内容：
+Knowledge Base Content:
 {KNOWLEDGE_CONTEXT}
 
-用户问题：{USER_QUESTION}</textarea>
+User Question: {USER_QUESTION}</textarea>
                         <div class="mt-2">
                             <small class="text-muted">
                                 <i class="fas fa-info-circle"></i>
-                                使用 {KNOWLEDGE_CONTEXT} 和 {USER_QUESTION} 作为占位符
+                                <span id="promptHint">使用 {KNOWLEDGE_CONTEXT} 和 {USER_QUESTION} 作为占位符</span>
                             </small>
                         </div>
                     </div>
@@ -299,8 +314,8 @@ export const chatHTML = `<!DOCTYPE html>
                         <i class="fas fa-robot"></i>
                     </div>
                     <div class="message-content">
-                        <div>👋 您好！我是您的AI知识助手。</div>
-                        <div class="mt-2">我可以基于知识库为您回答问题。请随时向我提问，我会为您检索相关信息并提供详细解答。</div>
+                        <div>👋 Hello! I'm your AI knowledge assistant.</div>
+                        <div class="mt-2">I can answer your questions based on the knowledge base. Please feel free to ask me anything, and I'll retrieve relevant information to provide detailed answers.</div>
                         <div class="message-time" data-time="now"></div>
                     </div>
                 </div>
@@ -328,22 +343,27 @@ export const chatHTML = `<!DOCTYPE html>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // 全局变量
+                // 全局变量
         const API_BASE_URL = window.location.origin;
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
         const systemPrompt = document.getElementById('systemPrompt');
+        const languageSelect = document.getElementById('languageSelect');
+        const loadDefaultPrompt = document.getElementById('loadDefaultPrompt');
+        const promptHint = document.getElementById('promptHint');
         const dbStatus = document.getElementById('dbStatus');
         const lastUpdate = document.getElementById('lastUpdate');
 
         let isProcessing = false;
+        let currentLanguage = 'en';
 
-        // 初始化
+                // 初始化
         document.addEventListener('DOMContentLoaded', function() {
             initEventListeners();
             checkKnowledgeBase();
             updateTimestamps();
+            loadDefaultPromptForLanguage();
 
             // 自动调整输入框高度
             messageInput.addEventListener('input', autoResizeTextarea);
@@ -352,6 +372,8 @@ export const chatHTML = `<!DOCTYPE html>
         // 事件监听
         function initEventListeners() {
             sendBtn.addEventListener('click', sendMessage);
+            loadDefaultPrompt.addEventListener('click', loadDefaultPromptForLanguage);
+            languageSelect.addEventListener('change', onLanguageChange);
 
             messageInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -363,27 +385,64 @@ export const chatHTML = `<!DOCTYPE html>
             });
         }
 
+        // 语言切换事件
+        function onLanguageChange() {
+            currentLanguage = languageSelect.value;
+            updateUILanguage();
+        }
+
+        // 更新界面语言
+        function updateUILanguage() {
+            if (currentLanguage === 'zh') {
+                promptHint.textContent = '使用 {KNOWLEDGE_CONTEXT} 和 {USER_QUESTION} 作为占位符';
+                messageInput.placeholder = '输入您的问题...（支持回车发送，Shift+回车换行）';
+            } else {
+                promptHint.textContent = 'Use {KNOWLEDGE_CONTEXT} and {USER_QUESTION} as placeholders';
+                messageInput.placeholder = 'Enter your question... (Enter to send, Shift+Enter for new line)';
+            }
+        }
+
+                        // 为当前语言加载默认提示词
+        async function loadDefaultPromptForLanguage() {
+            try {
+                const language = currentLanguage === 'auto' ? 'en' : currentLanguage;
+                const response = await fetch(\`\${API_BASE_URL}/data_cleaner/get_default_prompt?language=\${language}&type=chat\`);
+                const result = await response.json();
+
+                if (result.success) {
+                    systemPrompt.value = result.prompt;
+                }
+            } catch (error) {
+                console.error('加载默认提示词失败:', error);
+            }
+        }
+
         // 自动调整文本框高度
         function autoResizeTextarea() {
             messageInput.style.height = 'auto';
             messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
         }
 
-        // 检查知识库状态
+                        // 检查知识库状态
         async function checkKnowledgeBase() {
             try {
                 const response = await fetch(\`\${API_BASE_URL}/data_cleaner/data_list?limit=1\`);
                 const result = await response.json();
 
                 if (result.success) {
-                    dbStatus.textContent = \`正常 (\${result.statistics.total_records}条记录)\`;
+                    const statusText = currentLanguage === 'zh' ?
+                        \`正常 (\${result.statistics.total_records}条记录)\` :
+                        \`Normal (\${result.statistics.total_records} records)\`;
+                    dbStatus.textContent = statusText;
                     dbStatus.className = 'text-success';
                 } else {
-                    dbStatus.textContent = '连接失败';
+                    const errorText = currentLanguage === 'zh' ? '连接失败' : 'Connection Failed';
+                    dbStatus.textContent = errorText;
                     dbStatus.className = 'text-danger';
                 }
             } catch (error) {
-                dbStatus.textContent = '连接失败';
+                const errorText = currentLanguage === 'zh' ? '连接失败' : 'Connection Failed';
+                dbStatus.textContent = errorText;
                 dbStatus.className = 'text-danger';
             }
         }
@@ -424,7 +483,8 @@ export const chatHTML = `<!DOCTYPE html>
                     },
                     body: JSON.stringify({
                         question: message,
-                        system_prompt: systemPrompt.value
+                        system_prompt: systemPrompt.value,
+                        language: currentLanguage
                     })
                 });
 
@@ -433,16 +493,22 @@ export const chatHTML = `<!DOCTYPE html>
                 // 隐藏正在思考
                 hideTypingIndicator();
 
-                if (result.success) {
+                                                if (result.success) {
                     // 添加AI回复
                     addMessage('assistant', result.answer, result.sources, result.stats);
                 } else {
-                    addMessage('assistant', '抱歉，处理您的问题时出现了错误：' + result.error);
+                    const errorMsg = currentLanguage === 'zh' ?
+                        '抱歉，处理您的问题时出现了错误：' + result.error :
+                        'Sorry, an error occurred while processing your question: ' + result.error;
+                    addMessage('assistant', errorMsg);
                 }
 
             } catch (error) {
                 hideTypingIndicator();
-                addMessage('assistant', '抱歉，网络连接出现问题，请稍后重试。');
+                const networkErrorMsg = currentLanguage === 'zh' ?
+                    '抱歉，网络连接出现问题，请稍后重试。' :
+                    'Sorry, there was a network connection issue. Please try again later.';
+                addMessage('assistant', networkErrorMsg);
                 console.error('发送消息失败:', error);
             } finally {
                 isProcessing = false;
@@ -462,14 +528,20 @@ export const chatHTML = `<!DOCTYPE html>
 
             const time = new Date().toLocaleTimeString('zh-CN');
 
-            let sourcesHtml = '';
+                        let sourcesHtml = '';
             if (sources && sources.length > 0) {
+                const sourcesTitle = currentLanguage === 'zh' ?
+                    \`参考知识源 (\${sources.length}条)\` :
+                    \`Reference Sources (\${sources.length} items)\`;
+                const fragmentPrefix = currentLanguage === 'zh' ? '知识片段' : 'Fragment';
+                const uncategorized = currentLanguage === 'zh' ? '未分类' : 'Uncategorized';
+
                 sourcesHtml = \`
                     <div class="knowledge-sources">
-                        <h6 class="mb-2"><i class="fas fa-book"></i> 参考知识源 (\${sources.length}条)</h6>
+                        <h6 class="mb-2"><i class="fas fa-book"></i> \${sourcesTitle}</h6>
                         \${sources.map((source, index) => \`
                             <div class="source-item">
-                                <div class="source-title">知识片段 \${index + 1} - \${source.category || '未分类'}</div>
+                                <div class="source-title">\${fragmentPrefix} \${index + 1} - \${source.category || uncategorized}</div>
                                 <div class="source-content">\${escapeHtml(source.content.substring(0, 200))}\${source.content.length > 200 ? '...' : ''}</div>
                             </div>
                         \`).join('')}
@@ -479,11 +551,16 @@ export const chatHTML = `<!DOCTYPE html>
 
             let statsHtml = '';
             if (stats) {
+                const searchLabel = currentLanguage === 'zh' ? '检索耗时' : 'Search Time';
+                const aiLabel = currentLanguage === 'zh' ? 'AI响应' : 'AI Response';
+                const matchesLabel = currentLanguage === 'zh' ? '命中' : 'Matches';
+                const matchesUnit = currentLanguage === 'zh' ? '条' : '';
+
                 statsHtml = \`
                     <div class="stats-info">
-                        <span><i class="fas fa-search"></i> 检索耗时: \${stats.search_time}ms</span>
-                        <span><i class="fas fa-brain"></i> AI响应: \${stats.ai_time}ms</span>
-                        <span><i class="fas fa-database"></i> 命中: \${stats.total_matches}条</span>
+                        <span><i class="fas fa-search"></i> \${searchLabel}: \${stats.search_time}ms</span>
+                        <span><i class="fas fa-brain"></i> \${aiLabel}: \${stats.ai_time}ms</span>
+                        <span><i class="fas fa-database"></i> \${matchesLabel}: \${stats.total_matches}\${matchesUnit}</span>
                     </div>
                 \`;
             }
