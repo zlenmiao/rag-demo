@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { dataCleanerHTML } from './templates/data_cleaner.js'
 import { dataViewerHTML } from './templates/data_viewer.js'
+import { chatHTML } from './templates/chat.js'
 
 const app = new Hono()
 
@@ -452,6 +453,279 @@ class DataCleanerService {
       }
     }
   }
+
+  // RAG对话相关方法
+
+  // 简单的中文分词函数
+  tokenizeChineseText(text) {
+    // 移除标点符号并分割
+    const cleanText = text.replace(/[，。！？；：""''（）【】《》\s\n\r\t]/g, ' ');
+
+    // 基于空格和常见分隔符分词
+    let words = cleanText.split(/\s+/).filter(word => word.length > 0);
+
+    // 提取2-4字的中文词组
+    const phrases = [];
+    for (let i = 0; i < words.length; i++) {
+      for (let len = 2; len <= Math.min(4, words[i].length); len++) {
+        if (i + len <= words.length) {
+          const phrase = words.slice(i, i + len).join('');
+          if (phrase.length >= 2 && /[\u4e00-\u9fa5]/.test(phrase)) {
+            phrases.push(phrase);
+          }
+        }
+      }
+    }
+
+    // 合并单字词和词组
+    const allWords = [...words, ...phrases];
+
+    // 去重并过滤过短的词
+    return [...new Set(allWords)].filter(word =>
+      word.length >= 1 && /[\u4e00-\u9fa5a-zA-Z0-9]/.test(word)
+    );
+  }
+
+  // 计算文本相似度（简单的词汇重叠度）
+  calculateSimilarity(query, text) {
+    const queryWords = this.tokenizeChineseText(query.toLowerCase());
+    const textWords = this.tokenizeChineseText(text.toLowerCase());
+
+    let matches = 0;
+    let totalWords = queryWords.length;
+
+    for (const word of queryWords) {
+      if (textWords.some(textWord => textWord.includes(word) || word.includes(textWord))) {
+        matches++;
+      }
+    }
+
+    return totalWords > 0 ? matches / totalWords : 0;
+  }
+
+  // RAG检索函数
+  async ragSearch(question, limit = 5) {
+    if (!this.env.SUPABASE_URL || !this.env.SUPABASE_SERVICE_KEY) {
+      return {
+        success: false,
+        error: "数据库配置未完成"
+      };
+    }
+
+    const startTime = Date.now();
+
+    try {
+      // 对问题进行分词
+      const keywords = this.tokenizeChineseText(question);
+
+      // 构建搜索查询 - 先尝试关键词匹配
+      let queryParams = 'select=*&order=created_at.desc&limit=50'; // 先获取较多数据用于排序
+
+      const response = await fetch(
+        `${this.env.SUPABASE_URL}/rest/v1/cleaned_data?${queryParams}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.env.SUPABASE_SERVICE_KEY}`,
+            'apikey': this.env.SUPABASE_ANON_KEY
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`数据库查询失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // 对结果进行相关性排序
+      const scoredResults = [];
+
+      for (const record of data) {
+        if (!record.cleaned_data?.chunks) continue;
+
+        for (const chunk of record.cleaned_data.chunks) {
+          // 计算多个字段的相关性得分
+          let score = 0;
+
+          // 搜索向量文本匹配（权重最高）
+          if (chunk.search_vector) {
+            score += this.calculateSimilarity(question, chunk.search_vector) * 3;
+          }
+
+          // 关键词匹配
+          if (chunk.keywords && Array.isArray(chunk.keywords)) {
+            const keywordText = chunk.keywords.join(' ');
+            score += this.calculateSimilarity(question, keywordText) * 2;
+          }
+
+          // 摘要匹配
+          if (chunk.summary) {
+            score += this.calculateSimilarity(question, chunk.summary) * 1.5;
+          }
+
+          // 原文匹配（权重较低）
+          if (record.original_text) {
+            score += this.calculateSimilarity(question, record.original_text) * 0.5;
+          }
+
+          // 只保留有一定相关性的结果
+          if (score > 0.1) {
+            scoredResults.push({
+              score: score,
+              content: chunk.search_vector || chunk.summary || '无内容',
+              summary: chunk.summary || '无摘要',
+              keywords: chunk.keywords || [],
+              category: chunk.category || '未分类',
+              source_id: record.id,
+              created_at: record.created_at
+            });
+          }
+        }
+      }
+
+      // 按相关性得分排序并取前N个
+      const topResults = scoredResults
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit);
+
+      const searchTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        results: topResults,
+        total_matches: scoredResults.length,
+        search_time: searchTime,
+        keywords_used: keywords.slice(0, 10) // 返回使用的关键词（限制数量）
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: `RAG检索失败: ${error.message}`,
+        search_time: Date.now() - startTime
+      };
+    }
+  }
+
+  // RAG对话方法
+  async ragChat(question, systemPrompt, searchLimit = 5) {
+    const startTime = Date.now();
+
+    try {
+      // 1. 执行RAG检索
+      const searchResult = await this.ragSearch(question, searchLimit);
+
+      if (!searchResult.success) {
+        return {
+          success: false,
+          error: searchResult.error
+        };
+      }
+
+      const searchTime = searchResult.search_time;
+      const aiStartTime = Date.now();
+
+      // 2. 构建知识库上下文
+      let knowledgeContext = '';
+      if (searchResult.results.length > 0) {
+        knowledgeContext = searchResult.results.map((result, index) => {
+          return `知识片段${index + 1}：
+分类：${result.category}
+摘要：${result.summary}
+内容：${result.content}
+关键词：${result.keywords.join(', ')}
+`;
+        }).join('\n---\n');
+      } else {
+        knowledgeContext = '未找到相关的知识库内容。';
+      }
+
+      // 3. 替换系统提示词中的占位符
+      const finalPrompt = systemPrompt
+        .replace('{KNOWLEDGE_CONTEXT}', knowledgeContext)
+        .replace('{USER_QUESTION}', question);
+
+      // 4. 调用AI API
+      if (!this.env.AI_API_KEY) {
+        return {
+          success: false,
+          error: "AI API密钥未配置"
+        };
+      }
+
+      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.env.AI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'deepseek-ai/DeepSeek-V3',
+          messages: [
+            {
+              role: 'system',
+              content: finalPrompt
+            },
+            {
+              role: 'user',
+              content: question
+            }
+          ],
+          max_tokens: 2000,
+          temperature: 0.3
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`AI API请求失败: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      const aiContent = result.choices?.[0]?.message?.content;
+
+      if (!aiContent) {
+        throw new Error('AI API返回内容为空');
+      }
+
+      const aiTime = Date.now() - aiStartTime;
+      const totalTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        answer: aiContent,
+        sources: searchResult.results.map(r => ({
+          content: r.content,
+          summary: r.summary,
+          category: r.category,
+          keywords: r.keywords
+        })),
+        stats: {
+          search_time: searchTime,
+          ai_time: aiTime,
+          total_time: totalTime,
+          total_matches: searchResult.total_matches,
+          sources_used: searchResult.results.length,
+          keywords_used: searchResult.keywords_used
+        },
+        usage: result.usage,
+        model: result.model
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: `RAG对话失败: ${error.message}`,
+        stats: {
+          search_time: 0,
+          ai_time: 0,
+          total_time: Date.now() - startTime,
+          total_matches: 0,
+          sources_used: 0
+        }
+      };
+    }
+  }
 }
 
 // 静态页面路由
@@ -478,7 +752,7 @@ app.get('/', (c) => {
     </div>
     <div class="container py-5">
         <div class="row">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card">
                     <div class="card-body text-center">
                         <h3>📝 数据清洗</h3>
@@ -487,12 +761,21 @@ app.get('/', (c) => {
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card">
                     <div class="card-body text-center">
                         <h3>📊 数据管理</h3>
                         <p>查看、编辑和管理已清洗的数据记录</p>
                         <a href="/data_viewer" class="btn btn-success">查看数据</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3>🤖 智能问答</h3>
+                        <p>基于知识库的AI对话，RAG技术驱动的智能助手</p>
+                        <a href="/chat" class="btn btn-info text-white">开始对话</a>
                     </div>
                 </div>
             </div>
@@ -679,6 +962,57 @@ app.delete('/data_cleaner/data/:id', async (c) => {
       error: `删除失败: ${error.message}`
     }, 500)
   }
+})
+
+// RAG对话API
+app.post('/chat/ask', async (c) => {
+  try {
+    const { question, system_prompt } = await c.req.json()
+
+    if (!question?.trim()) {
+      return c.json({
+        success: false,
+        error: "问题不能为空"
+      }, 400)
+    }
+
+    const service = new DataCleanerService(c.env)
+
+    // 使用默认系统提示词（如果没有提供）
+    const defaultSystemPrompt = `你是一个专业的知识助手，专门基于提供的知识库内容回答用户问题。
+
+回答要求：
+1. 主要基于提供的知识库内容进行回答
+2. 如果知识库中没有相关信息，请明确说明并提供一般性建议
+3. 回答要准确、详细且有条理
+4. 可以适当引用知识库中的具体内容
+5. 保持友好和专业的语调
+
+知识库内容：
+{KNOWLEDGE_CONTEXT}
+
+用户问题：{USER_QUESTION}`;
+
+    const finalSystemPrompt = system_prompt?.trim() || defaultSystemPrompt;
+
+    const result = await service.ragChat(question, finalSystemPrompt, 5);
+
+    return c.json(result)
+  } catch (error) {
+    return c.json({
+      success: false,
+      error: `对话处理失败: ${error.message}`
+    }, 500)
+  }
+})
+
+// 聊天页面路由
+app.get('/chat', (c) => {
+  return c.redirect('/chat/')
+})
+
+app.get('/chat/', (c) => {
+  return c.html(chatHTML)
 })
 
 // 健康检查

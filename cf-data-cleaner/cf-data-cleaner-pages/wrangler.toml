@@ -1,0 +1,24 @@
+name = "cf-data-cleaner-pages"
+compatibility_date = "2023-12-18"
+
+# Pages配置
+pages_build_output_dir = "public"
+
+# 环境变量（通过 wrangler secret 设置）
+# wrangler secret put AI_API_KEY --env production
+# wrangler secret put SUPABASE_URL --env production
+# wrangler secret put SUPABASE_ANON_KEY --env production
+# wrangler secret put SUPABASE_SERVICE_KEY --env production
+
+[env.production]
+name = "cf-data-cleaner-pages"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+# 开发环境
+[env.preview]
+name = "cf-data-cleaner-pages-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"

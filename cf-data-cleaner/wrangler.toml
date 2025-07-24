@@ -12,6 +12,16 @@ compatibility_date = "2023-12-18"
 [vars]
 ENVIRONMENT = "production"
 
+# 自定义域名配置（如果有自己的域名）
+# 取消注释并修改为你的域名
+# [[routes]]
+# pattern = "your-domain.com/data-cleaner/*"
+# zone_name = "your-domain.com"
+
+# 或者使用自定义域名
+# [custom_domains]
+# domains = ["api.your-domain.com"]
+
 # D1 数据库绑定（如果需要本地数据库支持）
 # [[d1_databases]]
 # binding = "DB"
