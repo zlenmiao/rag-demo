@@ -272,8 +272,8 @@ export const chatHTML = `<!DOCTYPE html>
                                 <h6><i class="fas fa-globe"></i> 语言设置</h6>
                                 <select class="form-select mb-3" id="languageSelect">
                                     <option value="auto">🌐 自动检测</option>
-                                    <option value="zh">🇨🇳 中文</option>
-                                    <option value="en" selected>🇺🇸 English</option>
+                                    <option value="zh" selected>🇨🇳 中文</option>
+                                    <option value="en">🇺🇸 English</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
@@ -283,19 +283,7 @@ export const chatHTML = `<!DOCTYPE html>
                                 </button>
                             </div>
                         </div>
-                        <textarea class="form-control" id="systemPrompt" rows="4" placeholder="Set AI assistant behavior and response style...">You are a professional knowledge assistant specialized in answering user questions based on the provided knowledge base content.
-
-Response Requirements:
-1. Answer primarily based on the provided knowledge base content
-2. If no relevant information is found in the knowledge base, clearly state this and provide general suggestions
-3. Answers should be accurate, detailed, and well-organized
-4. Appropriately quote specific content from the knowledge base
-5. Maintain a friendly and professional tone
-
-Knowledge Base Content:
-{KNOWLEDGE_CONTEXT}
-
-User Question: {USER_QUESTION}</textarea>
+                        <textarea class="form-control" id="systemPrompt" rows="4" placeholder="设置AI助手的行为和回答风格...">正在加载默认提示词...</textarea>
                         <div class="mt-2">
                             <small class="text-muted">
                                 <i class="fas fa-info-circle"></i>
@@ -314,8 +302,8 @@ User Question: {USER_QUESTION}</textarea>
                         <i class="fas fa-robot"></i>
                     </div>
                     <div class="message-content">
-                        <div>👋 Hello! I'm your AI knowledge assistant.</div>
-                        <div class="mt-2">I can answer your questions based on the knowledge base. Please feel free to ask me anything, and I'll retrieve relevant information to provide detailed answers.</div>
+                        <div>👋 您好！我是您的 AI 知识助手。</div>
+                        <div class="mt-2">我可以基于知识库为您回答问题。请直接提问，我会检索相关信息并提供详细解答。</div>
                         <div class="message-time" data-time="now"></div>
                     </div>
                 </div>
@@ -356,7 +344,7 @@ User Question: {USER_QUESTION}</textarea>
         const lastUpdate = document.getElementById('lastUpdate');
 
         let isProcessing = false;
-        let currentLanguage = 'en';
+        let currentLanguage = 'zh';
 
                 // 初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -364,6 +352,7 @@ User Question: {USER_QUESTION}</textarea>
             checkKnowledgeBase();
             updateTimestamps();
             loadDefaultPromptForLanguage();
+            updateUILanguage();
 
             // 自动调整输入框高度
             messageInput.addEventListener('input', autoResizeTextarea);
@@ -386,9 +375,11 @@ User Question: {USER_QUESTION}</textarea>
         }
 
         // 语言切换事件
-        function onLanguageChange() {
+        async function onLanguageChange() {
             currentLanguage = languageSelect.value;
             updateUILanguage();
+            await loadDefaultPromptForLanguage();
+            await checkKnowledgeBase();
         }
 
         // 更新界面语言

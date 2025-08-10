@@ -204,6 +204,33 @@ export const dataCleanerHTML = `<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- System Prompt 配置区域（上移到最前） -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-cog"></i> System Prompt 配置</h5>
+                        <div>
+                            <select class="form-select form-select-sm d-inline-block me-2" style="width: auto;" id="dataCleanerLanguage">
+                                <option value="zh" selected>🇨🇳 中文</option>
+                                <option value="en">🇺🇸 English</option>
+                            </select>
+                            <button class="btn btn-sm btn-outline-primary" id="resetPromptBtn">
+                                <i class="fas fa-undo"></i> <span id="resetPromptText">重置默认</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <textarea class="form-control prompt-area" id="systemPrompt" placeholder="在这里编辑数据清洗的System Prompt...">正在加载默认提示词...</textarea>
+                        <small class="form-text text-muted mt-2">
+                            <i class="fas fa-info-circle"></i>
+                            <span id="promptHintText">修改此提示词可以调整AI的数据清洗策略和输出格式</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 文本输入区域 -->
         <div class="row mb-4">
             <div class="col-12">
@@ -257,6 +284,9 @@ export const dataCleanerHTML = `<!DOCTYPE html>
                             <a href="/data_viewer/" class="btn btn-info btn-action">
                                 <i class="fas fa-eye"></i> 查看数据
                             </a>
+                            <a href="/chat/" class="btn btn-warning btn-action">
+                                <i class="fas fa-comments"></i> 智能对话
+                            </a>
                         </div>
                         <div class="status-message" id="statusMessage"></div>
                         <div class="loading" id="loadingIndicator">
@@ -301,32 +331,7 @@ export const dataCleanerHTML = `<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- System Prompt 配置区域 -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5><i class="fas fa-cog"></i> System Prompt 配置</h5>
-                        <div>
-                            <select class="form-select form-select-sm d-inline-block me-2" style="width: auto;" id="dataCleanerLanguage">
-                                <option value="zh">🇨🇳 中文</option>
-                                <option value="en" selected>🇺🇸 English</option>
-                            </select>
-                            <button class="btn btn-sm btn-outline-primary" id="resetPromptBtn">
-                                <i class="fas fa-undo"></i> <span id="resetPromptText">重置默认</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <textarea class="form-control prompt-area" id="systemPrompt" placeholder="在这里编辑数据清洗的System Prompt...">正在加载默认提示词...</textarea>
-                        <small class="form-text text-muted mt-2">
-                            <i class="fas fa-info-circle"></i>
-                            <span id="promptHintText">修改此提示词可以调整AI的数据清洗策略和输出格式</span>
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- System Prompt 配置区域（已上移） -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -337,7 +342,7 @@ export const dataCleanerHTML = `<!DOCTYPE html>
         let cleanedData = null;
         let defaultPrompt = '';
         let currentMode = 'text'; // 'text' or 'image'
-        let currentLanguage = 'en';
+        let currentLanguage = 'zh';
 
         // API 基础URL - 自动使用当前域名
         const API_BASE_URL = window.location.origin;
